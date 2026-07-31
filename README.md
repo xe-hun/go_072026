@@ -1,0 +1,91 @@
+# Notes Sync Backend
+
+Backend service for an offline-first mobile notes app. It implements JWT-authenticated devices, ordered note blocks, diff-style sync operations, idempotent retries, soft deletion, append-only change history, snapshots, and a PostgreSQL outbox worker.
+
+## Stack
+
+- Go
+- Chi
+- PostgreSQL
+- pgx/v5 + pgxpool
+- sqlc query definitions
+- Goose migrations
+- Supabase-compatible JWT/JWKS validation
+- Docker Compose for local PostgreSQL
+- `log/slog`
+
+## Setup
+
+1. Copy `.env.example` to `.env`.
+2. Fill in `JWT_ISSUER`, `JWT_AUDIENCE`, and `JWT_JWKS_URL`.
+3. Start PostgreSQL:
+
+```sh
+make db-up
+```
+
+4. Apply migrations:
+
+```sh
+make migrate-up
+```
+
+5. Run the API:
+
+```sh
+make run-api
+```
+
+6. Run the worker in a second terminal:
+
+```sh
+make run-worker
+```
+
+## Development
+
+Useful commands:
+
+```sh
+make sqlc
+make test
+make test-integration
+make lint
+make db-reset
+```
+
+`make db-reset` deletes the local PostgreSQL Docker volume after an explicit confirmation prompt.
+
+VS Code debug configurations are included for the API and worker in `.vscode/launch.json`.
+
+## Endpoints
+
+- `GET /health`
+- `GET /ready`
+- `POST /v1/devices`
+- `GET /v1/devices`
+- `DELETE /v1/devices/{deviceId}`
+- `POST /v1/sync`
+- `GET /v1/notes/{noteId}`
+- `GET /v1/notes/{noteId}/snapshot`
+
+All `/v1` endpoints require `Authorization: Bearer <JWT>`.
+
+## Sync Notes
+
+The sync endpoint accepts a batch of note/block operations and returns:
+
+- accepted operations with authoritative note/block versions
+- rejected operation conflicts
+- pulled changes after the supplied cursor
+- the next cursor
+
+Current state updates and change-log inserts happen inside the same PostgreSQL transaction. Operation idempotency is enforced by `(device_id, client_operation_id)`.
+
+## Assumptions
+
+- The client normally generates note, block, device, and operation UUIDs.
+- Text edits are stored as structured operations/changed fields, not raw character diffs.
+- Automatic text conflict merging is intentionally not implemented in v1.
+- Snapshot jobs are queued when configured thresholds are reached; cleanup/compaction hooks are present and deliberately conservative.
+

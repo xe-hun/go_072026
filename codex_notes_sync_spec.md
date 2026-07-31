@@ -1,0 +1,1219 @@
+# Notes Sync Backend — Codex Implementation Specification
+
+## 1. Project Summary
+
+Build a backend service for a mobile note-taking application.
+
+The backend must support:
+
+- User authentication
+- Notes made of ordered blocks
+- Offline-first synchronization
+- Diff-based push and pull sync
+- Multiple devices per user
+- Version conflict detection
+- Idempotent retries
+- Soft deletion and tombstones
+- Periodic full-note snapshots
+- Background snapshot and compaction jobs
+- Horizontal scaling through stateless API instances
+- Local development with PostgreSQL in Docker
+
+The initial product is a personal note-taking application. Real-time collaborative editing between multiple users is out of scope.
+
+---
+
+## 2. Technology Stack
+
+Use the following stack:
+
+- Language: Go
+- HTTP router: Chi
+- Database: PostgreSQL
+- PostgreSQL driver and pool: pgx/v5 and pgxpool
+- SQL code generation: sqlc
+- Database migrations: Goose or golang-migrate
+- Authentication: external JWT-based provider, initially Supabase Auth compatible
+- Local database: PostgreSQL Docker container through Docker Compose
+- Logging: Go `log/slog`
+- Configuration: environment variables loaded from `.env` in development
+- API format: JSON over HTTPS
+- Compression: gzip support for sync requests and responses
+- Background jobs: PostgreSQL outbox table and separate Go worker process
+- Production target: stateless container deployment such as Google Cloud Run
+
+Do not use:
+
+- Microservices
+- Kubernetes
+- Kafka
+- RabbitMQ
+- Redis as a required dependency
+- A separate NoSQL database for note changes
+- A heavy ORM
+
+PostgreSQL is the single source of truth for current note state, change history, snapshots, devices, and jobs.
+
+---
+
+## 3. Architectural Style
+
+Use a modular monolith with clear separation between HTTP, application logic, and persistence.
+
+Request flow:
+
+```text
+HTTP request
+    -> Middleware
+    -> Handler
+    -> Service
+    -> PostgreSQL transaction
+    -> Store/sqlc queries
+    -> HTTP response
+```
+
+Main responsibilities:
+
+- Handler: HTTP parsing, authentication context, basic validation, response mapping
+- Service: business rules, sync logic, authorization, conflict handling, transaction coordination
+- Store: SQL queries and persistence only
+- Worker: snapshots, compaction, cleanup, integrity checks
+
+Do not place SQL or sync business logic inside handlers.
+
+Do not use global database variables. Dependencies must be passed explicitly through constructors.
+
+---
+
+## 4. Suggested Project Layout
+
+```text
+notes-server/
+├── cmd/
+│   ├── api/
+│   │   └── main.go
+│   └── worker/
+│       └── main.go
+├── internal/
+│   ├── auth/
+│   │   ├── claims.go
+│   │   └── middleware.go
+│   ├── config/
+│   │   └── config.go
+│   ├── httpapi/
+│   │   ├── errors.go
+│   │   ├── response.go
+│   │   └── validation.go
+│   ├── middleware/
+│   │   ├── logging.go
+│   │   ├── recovery.go
+│   │   └── request_id.go
+│   ├── notes/
+│   │   ├── handler.go
+│   │   ├── service.go
+│   │   ├── types.go
+│   │   └── errors.go
+│   ├── sync/
+│   │   ├── handler.go
+│   │   ├── service.go
+│   │   ├── operations.go
+│   │   ├── types.go
+│   │   └── errors.go
+│   ├── devices/
+│   │   ├── service.go
+│   │   └── types.go
+│   ├── jobs/
+│   │   ├── worker.go
+│   │   ├── snapshots.go
+│   │   ├── compaction.go
+│   │   └── cleanup.go
+│   └── store/
+│       ├── store.go
+│       ├── postgres.go
+│       └── transaction.go
+├── db/
+│   ├── migrations/
+│   ├── queries/
+│   └── generated/
+├── tests/
+│   └── integration/
+├── .env.example
+├── .gitignore
+├── compose.yaml
+├── Dockerfile
+├── Makefile
+├── sqlc.yaml
+├── go.mod
+└── README.md
+```
+
+---
+
+## 5. Domain Model
+
+### 5.1 Note
+
+A note contains:
+
+- ID
+- Owner ID
+- Optional category ID
+- Title
+- Note-level metadata
+- Current note version
+- Created timestamp
+- Updated timestamp
+- Optional deleted timestamp
+
+A note does not store its blocks as a PostgreSQL array.
+
+### 5.2 Block
+
+A block belongs to one note and contains:
+
+- ID
+- Note ID
+- Block type
+- Text content
+- Sortable position
+- Block-specific properties
+- Current block version
+- Created timestamp
+- Updated timestamp
+- Optional deleted timestamp
+
+Supported initial block types:
+
+- text
+- bullet
+- todo
+- numbered list
+- attachment
+
+The schema must allow new block types later.
+
+### 5.3 JSONB usage
+
+Use normal PostgreSQL columns for fields that are common, required, indexed, or frequently queried.
+
+Use JSONB for optional and type-specific properties.
+
+Examples:
+
+Note metadata:
+
+```json
+{
+  "isPinned": true,
+  "isArchived": false,
+  "archivedAt": "2024-06-01T12:34:56Z",
+  "isBoardNote": false
+}
+```
+
+Todo block properties:
+
+```json
+{
+  "dueDate": null,
+  "isBold": true,
+  "isItalic": false,
+  "isJustified": false,
+  "textAlignmentIndex": 0,
+  "isUnderlined": false,
+  "textSizeIndex": 1,
+  "fontStyleIndex": 0,
+  "backgroundColorIndex": 2,
+  "isChecked": false
+}
+```
+
+Do not store the complete database model as one JSONB document.
+
+---
+
+## 6. Database Schema
+
+Use UUID primary keys generated by the client or server.
+
+Use `TIMESTAMPTZ` for timestamps.
+
+### 6.1 Categories
+
+```sql
+CREATE TABLE categories (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
+    UNIQUE (owner_id, name)
+);
+```
+
+### 6.2 Notes
+
+```sql
+CREATE TABLE notes (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    category_id UUID REFERENCES categories(id),
+    title TEXT NOT NULL DEFAULT '',
+    metadata JSONB NOT NULL DEFAULT '{}',
+    current_version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX notes_owner_updated_idx
+    ON notes (owner_id, updated_at DESC);
+
+CREATE INDEX notes_owner_category_idx
+    ON notes (owner_id, category_id)
+    WHERE deleted_at IS NULL;
+```
+
+### 6.3 Note Blocks
+
+```sql
+CREATE TABLE note_blocks (
+    id UUID PRIMARY KEY,
+    note_id UUID NOT NULL REFERENCES notes(id),
+    block_type TEXT NOT NULL,
+    text_content TEXT NOT NULL DEFAULT '',
+    position TEXT NOT NULL,
+    properties JSONB NOT NULL DEFAULT '{}',
+    current_version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
+    UNIQUE (note_id, position)
+);
+
+CREATE INDEX note_blocks_note_position_idx
+    ON note_blocks (note_id, position);
+```
+
+Use string-based fractional indexing for `position` so block insertion and movement usually update one block only.
+
+Do not use array indexes such as `1, 2, 3` as the permanent ordering mechanism.
+
+### 6.4 Sync Devices
+
+```sql
+CREATE TABLE sync_devices (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    device_name TEXT,
+    platform TEXT,
+    app_version TEXT,
+    protocol_version INTEGER NOT NULL DEFAULT 1,
+    last_global_cursor BIGINT NOT NULL DEFAULT 0,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ
+);
+
+CREATE INDEX sync_devices_owner_idx
+    ON sync_devices (owner_id);
+```
+
+### 6.5 Note Changes
+
+`note_changes` is append-only.
+
+```sql
+CREATE TABLE note_changes (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    note_id UUID NOT NULL REFERENCES notes(id),
+    block_id UUID,
+    device_id UUID NOT NULL REFERENCES sync_devices(id),
+    client_operation_id UUID NOT NULL,
+    entity_type TEXT NOT NULL,
+    operation_type TEXT NOT NULL,
+    base_note_version BIGINT NOT NULL,
+    resulting_note_version BIGINT NOT NULL,
+    base_block_version BIGINT,
+    resulting_block_version BIGINT,
+    change_format TEXT NOT NULL DEFAULT 'structured-operation-v1',
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    change_data JSONB NOT NULL,
+    global_sequence BIGINT GENERATED ALWAYS AS IDENTITY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (device_id, client_operation_id),
+    UNIQUE (note_id, resulting_note_version)
+);
+
+CREATE INDEX note_changes_owner_sequence_idx
+    ON note_changes (owner_id, global_sequence);
+
+CREATE INDEX note_changes_note_version_idx
+    ON note_changes (note_id, resulting_note_version);
+```
+
+Initial entity types:
+
+- note
+- block
+
+Initial operation types:
+
+- create_note
+- update_note
+- delete_note
+- restore_note
+- create_block
+- update_block
+- move_block
+- delete_block
+- restore_block
+
+Example change payload:
+
+```json
+{
+  "schemaVersion": 1,
+  "fields": {
+    "textContent": "Buy milk and bread",
+    "properties": {
+      "isChecked": false,
+      "isBold": true
+    }
+  }
+}
+```
+
+Store operations or changed fields, not only raw character diffs.
+
+### 6.6 Snapshots
+
+```sql
+CREATE TABLE note_snapshots (
+    id UUID PRIMARY KEY,
+    note_id UUID NOT NULL REFERENCES notes(id),
+    owner_id UUID NOT NULL,
+    version BIGINT NOT NULL,
+    snapshot_format TEXT NOT NULL DEFAULT 'note-snapshot-v1',
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    snapshot_data JSONB NOT NULL,
+    checksum TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (note_id, version)
+);
+```
+
+Snapshot structure:
+
+```json
+{
+  "schemaVersion": 1,
+  "note": {
+    "id": "uuid",
+    "title": "Shopping",
+    "categoryId": "uuid",
+    "metadata": {},
+    "version": 20,
+    "deletedAt": null
+  },
+  "blocks": [
+    {
+      "id": "uuid",
+      "type": "todo",
+      "text": "Buy milk",
+      "position": "a0",
+      "properties": {
+        "isChecked": false
+      },
+      "version": 4,
+      "deletedAt": null
+    }
+  ]
+}
+```
+
+### 6.7 Outbox Jobs
+
+```sql
+CREATE TABLE outbox_jobs (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    job_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    locked_at TIMESTAMPTZ,
+    locked_by TEXT,
+    completed_at TIMESTAMPTZ,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX outbox_jobs_available_idx
+    ON outbox_jobs (available_at, id)
+    WHERE completed_at IS NULL;
+```
+
+---
+
+## 7. Versioning Rules
+
+Maintain two version levels:
+
+- Note version
+- Block version
+
+Rules:
+
+1. Every note-level or block-level mutation increments `notes.current_version`.
+2. A block mutation also increments `note_blocks.current_version`.
+3. Each accepted operation records its base and resulting versions.
+4. The server is authoritative for resulting versions.
+5. Clients must send the base version they edited.
+6. A version mismatch must return an explicit conflict unless the operation can be safely merged.
+7. Do not silently overwrite note body or block text with last-write-wins.
+
+Last-write-wins is acceptable for low-risk fields such as:
+
+- Pinned state
+- Background color
+- Sort preference
+- Last-opened timestamp
+
+---
+
+## 8. Sync Protocol
+
+### 8.1 Endpoint
+
+```http
+POST /v1/sync
+Authorization: Bearer <JWT>
+Content-Type: application/json
+Content-Encoding: gzip optional
+Accept-Encoding: gzip
+```
+
+### 8.2 Request
+
+```json
+{
+  "protocolVersion": 1,
+  "clientVersion": "1.0.0",
+  "deviceId": "uuid",
+  "cursor": 8152,
+  "limit": 500,
+  "operations": [
+    {
+      "operationId": "uuid",
+      "noteId": "uuid",
+      "blockId": "uuid",
+      "entityType": "block",
+      "operationType": "update_block",
+      "baseNoteVersion": 17,
+      "baseBlockVersion": 4,
+      "changeFormat": "structured-operation-v1",
+      "changeData": {
+        "fields": {
+          "insertIndex": 13,
+          "insertedText": "Updated text"
+        }
+      }
+    }
+  ]
+}
+```
+
+### 8.3 Response
+
+```json
+{
+  "accepted": [
+    {
+      "operationId": "uuid",
+      "noteId": "uuid",
+      "blockId": "uuid",
+      "noteVersion": 18,
+      "blockVersion": 5,
+      "sequence": 8153
+    }
+  ],
+  "rejected": [],
+  "changes": [],
+  "nextCursor": 8153,
+  "hasMore": false,
+  "resyncRequired": false
+}
+```
+
+### 8.4 Conflict Response Item
+
+```json
+{
+  "operationId": "uuid",
+  "code": "BASE_VERSION_CONFLICT",
+  "noteId": "uuid",
+  "blockId": "uuid",
+  "clientNoteVersion": 17,
+  "serverNoteVersion": 20,
+  "clientBlockVersion": 4,
+  "serverBlockVersion": 6
+}
+```
+
+Use HTTP `200 OK` for a valid batch that may contain accepted and rejected individual operations.
+
+Use HTTP `409 Conflict` only when the whole request cannot be processed due to a request-level conflict.
+
+### 8.5 Sync Transaction Flow
+
+For each sync request:
+
+1. Authenticate the JWT.
+2. Extract the authenticated user ID.
+3. Validate protocol version.
+4. Validate that the device belongs to the user and is not revoked.
+5. Validate operation count and payload size.
+6. Begin a PostgreSQL transaction.
+7. Deduplicate each operation using `(device_id, client_operation_id)`.
+8. Lock affected note rows using `SELECT ... FOR UPDATE`.
+9. Verify ownership through `owner_id`.
+10. Compare base versions.
+11. Apply accepted changes to `notes` and `note_blocks`.
+12. Increment versions.
+13. Insert `note_changes` records.
+14. Insert an outbox job if snapshot criteria are met.
+15. Pull remote changes after the supplied user cursor.
+16. Update device cursor and `last_seen_at`.
+17. Commit.
+18. Return accepted operations, rejected operations, pulled changes, and the next cursor.
+
+Current-state updates and change-log inserts must occur in the same database transaction.
+
+---
+
+## 9. Idempotency
+
+Clients may retry requests after network timeouts.
+
+Requirements:
+
+- Every client operation has a stable UUID `operationId`.
+- `(device_id, client_operation_id)` must be unique.
+- Reprocessing an already accepted operation must not apply it twice.
+- The server should return the original accepted result when possible.
+- Entire sync batches do not need one batch idempotency key if individual operations are idempotent.
+
+---
+
+## 10. Deletion and Tombstones
+
+Do not immediately remove notes or blocks.
+
+On deletion:
+
+- Set `deleted_at`.
+- Increment the relevant versions.
+- Write a delete operation into `note_changes`.
+- Return the deletion to other devices through normal sync.
+
+If a device cursor is older than retained history, return:
+
+```json
+{
+  "resyncRequired": true,
+  "reason": "CURSOR_EXPIRED"
+}
+```
+
+The client must then request a full resync from current snapshots/current state.
+
+Permanent deletion should happen only after a configurable retention period.
+
+---
+
+## 11. Snapshot and Compaction Rules
+
+Snapshots must be created asynchronously by the worker.
+
+Create a snapshot when any of the following is true:
+
+- At least 100 changes exist after the last snapshot.
+- Change payload size after the last snapshot exceeds 512 KB.
+- The last snapshot is older than a configured duration.
+- A schema migration requires a new snapshot.
+
+Worker process:
+
+1. Claim an outbox job safely.
+2. Read the note and all blocks in a consistent transaction.
+3. Build the snapshot document.
+4. Compute a SHA-256 checksum.
+5. Insert the snapshot.
+6. Verify the snapshot represents the expected note version.
+7. Mark the job complete.
+
+Do not immediately remove old changes.
+
+Initial retention policy:
+
+- Keep compacted changes for at least 30 days.
+- Cleanup runs as a separate background job.
+- A full rebuild from snapshot plus retained changes must be tested.
+
+---
+
+## 12. Authentication and Authorization
+
+Use JWT bearer authentication.
+
+The Go API must validate:
+
+- Token signature
+- Token issuer
+- Token audience
+- Token expiry
+- User identifier claim
+
+Every database access must be scoped by the authenticated user.
+
+Example:
+
+```sql
+SELECT *
+FROM notes
+WHERE id = $1
+  AND owner_id = $2;
+```
+
+Never authorize only by a client-supplied note ID.
+
+Device registration and revocation must be supported.
+
+Initial endpoints:
+
+```http
+POST /v1/devices
+DELETE /v1/devices/{deviceId}
+GET /v1/devices
+```
+
+---
+
+## 13. HTTP Endpoints
+
+Initial API endpoints:
+
+```text
+GET    /health
+GET    /ready
+POST   /v1/devices
+GET    /v1/devices
+DELETE /v1/devices/{deviceId}
+POST   /v1/sync
+GET    /v1/notes/{noteId}
+GET    /v1/notes/{noteId}/snapshot
+```
+
+The sync endpoint is the main write path.
+
+Direct note endpoints are primarily for recovery, debugging, or full resync.
+
+---
+
+## 14. Error Format
+
+Use a consistent error response:
+
+```json
+{
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "The request is invalid.",
+    "requestId": "uuid",
+    "details": {}
+  }
+}
+```
+
+Initial error codes:
+
+- INVALID_REQUEST
+- UNAUTHORIZED
+- FORBIDDEN
+- NOT_FOUND
+- DEVICE_REVOKED
+- UNSUPPORTED_PROTOCOL
+- BASE_VERSION_CONFLICT
+- CURSOR_EXPIRED
+- PAYLOAD_TOO_LARGE
+- RATE_LIMITED
+- INTERNAL_ERROR
+
+Do not expose raw SQL, database, stack trace, or JWT validation errors to clients.
+
+---
+
+## 15. Middleware
+
+Implement middleware for:
+
+- Request ID
+- Structured request logging
+- Panic recovery
+- Authentication
+- Request body size limits
+- gzip decompression with decompressed-size limit
+- gzip response compression
+- Request timeout
+- Basic rate limiting interface
+
+Suggested defaults:
+
+- Maximum compressed request: 2 MB
+- Maximum decompressed request: 10 MB
+- Maximum operations per sync request: 500
+- Default pull limit: 500
+- Maximum pull limit: 1000
+- Request timeout: 30 seconds
+
+Make limits configurable through environment variables.
+
+---
+
+## 16. Configuration
+
+Required environment variables:
+
+```env
+APP_ENV=development
+PORT=8080
+DATABASE_URL=postgres://notes_user:notes_password@localhost:5432/notes_db?sslmode=disable
+JWT_ISSUER=
+JWT_AUDIENCE=
+JWT_JWKS_URL=
+LOG_LEVEL=debug
+MAX_DB_CONNECTIONS=10
+SYNC_MAX_OPERATIONS=500
+SYNC_DEFAULT_PULL_LIMIT=500
+SYNC_MAX_PULL_LIMIT=1000
+SNAPSHOT_CHANGE_THRESHOLD=100
+SNAPSHOT_BYTE_THRESHOLD=524288
+CHANGE_RETENTION_DAYS=30
+```
+
+Configuration must be loaded once at startup and validated.
+
+The application must fail fast if required configuration is missing.
+
+---
+
+## 17. Local Development Setup
+
+Use Docker Compose only for PostgreSQL initially.
+
+The Go API should run directly from VS Code for easy debugging.
+
+### 17.1 `compose.yaml`
+
+```yaml
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: notes-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notes_user
+      POSTGRES_PASSWORD: notes_password
+      POSTGRES_DB: notes_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - notes_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes_user -d notes_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  notes_postgres_data:
+```
+
+### 17.2 VS Code Debugging
+
+Create `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Notes API",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/api",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Run Notes Worker",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/worker",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}
+```
+
+### 17.3 Development Commands
+
+Provide a Makefile with:
+
+```text
+make db-up
+make db-down
+make db-reset
+make migrate-up
+make migrate-down
+make sqlc
+make run-api
+make run-worker
+make test
+make test-integration
+make lint
+```
+
+`db-reset` must clearly warn that local data will be deleted.
+
+---
+
+## 18. Database Access Rules
+
+Use sqlc-generated queries.
+
+Use one `pgxpool.Pool` per process.
+
+Configure maximum connections.
+
+Pass `context.Context` through handlers, services, and stores.
+
+Transactions are coordinated by the service layer.
+
+Do not mix transaction queries with pool queries during the same operation.
+
+Store interface example:
+
+```go
+type Store interface {
+    WithTx(ctx context.Context, fn func(Store) error) error
+
+    GetNoteForUpdate(ctx context.Context, noteID, ownerID uuid.UUID) (Note, error)
+    GetBlockForUpdate(ctx context.Context, noteID, blockID uuid.UUID) (NoteBlock, error)
+    FindProcessedOperation(ctx context.Context, deviceID, operationID uuid.UUID) (NoteChange, error)
+    InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams) (NoteChange, error)
+    GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, limit int32) ([]NoteChange, error)
+}
+```
+
+Avoid unnecessary repository interfaces for every table. Introduce interfaces where they improve testing or transaction handling.
+
+---
+
+## 19. Logging and Observability
+
+Use structured logs with `slog`.
+
+Include:
+
+- Request ID
+- User ID when authenticated
+- Device ID when available
+- Route
+- HTTP status
+- Duration
+- Accepted operation count
+- Rejected operation count
+- Pull change count
+- Database error category
+
+Do not log:
+
+- JWTs
+- Note text
+- Full request bodies
+- Passwords
+- Sensitive metadata
+
+Expose simple metrics or prepare instrumentation hooks for:
+
+- Sync request duration
+- Accepted operations
+- Rejected operations
+- Version conflicts
+- Duplicate operation retries
+- Pulled changes
+- Snapshot duration
+- Snapshot failures
+- Outbox queue depth
+- Database pool usage
+
+---
+
+## 20. Security Requirements
+
+Implement:
+
+- JWT validation
+- Owner-scoped queries
+- Device ownership validation
+- Body size limits
+- Decompression limits
+- Operation count limits
+- Input schema validation
+- Rate limiting interface
+- Server timeouts
+- Database statement timeouts where appropriate
+- No raw internal errors in responses
+- Production TLS handled by deployment platform
+
+Validate allowed block types and operation types.
+
+Validate JSONB properties by block type in the service layer.
+
+Reject unknown or unsupported schema versions.
+
+---
+
+## 21. Testing Requirements
+
+### 21.1 Unit Tests
+
+Test service logic for:
+
+- Valid operation application
+- Note version increments
+- Block version increments
+- Version conflicts
+- Duplicate operation retries
+- Unauthorized note access
+- Invalid device ownership
+- Soft deletion
+- Block movement
+- Snapshot threshold calculation
+
+### 21.2 PostgreSQL Integration Tests
+
+Use a real PostgreSQL database, preferably a temporary Docker container or isolated test database.
+
+Test:
+
+- Migrations apply successfully
+- Unique idempotency constraint
+- Transaction rollback
+- Row locking behavior
+- Cursor ordering
+- Concurrent edits to one note
+- Owner-scoped queries
+- Tombstone retrieval
+- Snapshot insertion and checksum
+
+### 21.3 API Tests
+
+Test:
+
+- Missing token
+- Invalid token
+- Invalid JSON
+- Oversized request
+- Unsupported protocol
+- Successful empty sync
+- Push-only sync
+- Pull-only sync
+- Combined push and pull
+- Partial batch conflicts
+- Revoked device
+- Cursor expired response
+
+### 21.4 Critical Sync Scenarios
+
+The following must pass:
+
+1. Retrying the same operation does not duplicate it.
+2. Two devices editing from the same block version results in one accepted edit and one explicit conflict.
+3. A failed transaction leaves the current state and change log unchanged.
+4. Deleted notes and blocks sync to offline devices.
+5. Changes are returned in increasing `global_sequence` order.
+6. A client can paginate sync changes without gaps or duplicates.
+7. Snapshot plus later changes reconstructs the current note state.
+8. An expired cursor triggers full resync instead of silent data loss.
+9. A user cannot access another user's note by guessing its UUID.
+
+---
+
+## 22. Production and Horizontal Scaling Requirements
+
+The API must remain stateless.
+
+Do not rely on:
+
+- Local disk
+- Process memory for durable state
+- In-memory locks
+- Sticky sessions
+- Process-local job queues
+
+All durable state belongs in PostgreSQL or object storage.
+
+Multiple API instances must be able to process requests safely.
+
+Concurrency for the same note must be controlled through PostgreSQL row locks or optimistic version checks.
+
+Use a small database pool per instance.
+
+Provide graceful shutdown:
+
+1. Stop accepting new requests.
+2. Allow active requests to finish within a timeout.
+3. Close database connections.
+
+Provide `/health` for process health and `/ready` for database readiness.
+
+---
+
+## 23. Out of Scope for Version One
+
+Do not implement in the first version:
+
+- Real-time WebSocket collaboration
+- Multi-user shared-note editing
+- CRDTs
+- Operational transformation
+- End-to-end encryption
+- Full-text search
+- Attachments and object storage
+- Kafka or external message queues
+- Cross-region deployment
+- Separate read replicas
+- Automatic conflict merging for overlapping text edits
+
+Design the `change_format`, `schema_version`, and snapshot format fields so these features can be added later.
+
+---
+
+## 24. Implementation Phases
+
+### Phase 1: Foundation
+
+- Initialize Go module
+- Create project layout
+- Add configuration loader
+- Add Docker Compose PostgreSQL
+- Add migrations
+- Add pgxpool and sqlc
+- Add health and readiness endpoints
+- Add structured logging and middleware
+
+### Phase 2: Authentication and Devices
+
+- JWT middleware
+- User identity context
+- Device registration
+- Device listing
+- Device revocation
+
+### Phase 3: Current Note State
+
+- Notes table and queries
+- Blocks table and queries
+- Categories table and queries
+- Note ownership checks
+- Read current note endpoint
+
+### Phase 4: Sync Push
+
+- Sync request types
+- Operation validation
+- Idempotency lookup
+- Note row locking
+- Version checks
+- Create/update/delete note operations
+- Create/update/move/delete block operations
+- Change-log insertion
+
+### Phase 5: Sync Pull
+
+- Global cursor queries
+- Cursor pagination
+- Device cursor updates
+- Tombstone delivery
+- Cursor expiration handling
+
+### Phase 6: Snapshots and Worker
+
+- Outbox jobs
+- Worker loop
+- Snapshot creation
+- Checksum generation
+- Snapshot endpoint
+- Compaction eligibility
+- Retention cleanup
+
+### Phase 7: Hardening
+
+- Integration tests
+- Concurrency tests
+- Request limits
+- gzip support
+- Graceful shutdown
+- Metrics hooks
+- Dockerfile
+- Production configuration documentation
+
+---
+
+## 25. Acceptance Criteria
+
+The implementation is complete when:
+
+- PostgreSQL starts locally with `docker compose up -d`.
+- Migrations create all required tables and indexes.
+- The Go API runs and debugs from VS Code.
+- The worker runs separately from VS Code.
+- JWT-authenticated users can register devices.
+- A client can send note and block operations through `/v1/sync`.
+- Accepted operations update current state and append exactly one change record.
+- Duplicate operations are not applied twice.
+- Stale versions return explicit conflicts.
+- A client can pull all changes after a cursor in correct order.
+- Notes and blocks are soft-deleted and deletion syncs correctly.
+- The worker creates valid snapshots asynchronously.
+- Snapshot checksums are stored.
+- Tests cover the critical sync scenarios.
+- The API contains no process-local persistent state and can run on multiple instances.
+- The README documents setup, migrations, running, debugging, testing, and environment variables.
+
+---
+
+## 26. Codex Working Instructions
+
+When implementing this specification:
+
+1. Work phase by phase.
+2. Keep the code compiling after each phase.
+3. Run formatting and tests after meaningful changes.
+4. Do not introduce technology outside this specification without a clear need.
+5. Prefer straightforward Go code over abstraction-heavy patterns.
+6. Keep handlers thin.
+7. Keep sync and authorization rules in services.
+8. Keep SQL explicit and generated through sqlc.
+9. Use PostgreSQL transactions for all state-plus-change-log writes.
+10. Add tests with each feature rather than postponing tests until the end.
+11. Document any assumption that is not defined in this specification.
+12. Do not silently change the sync protocol or database model.
+
