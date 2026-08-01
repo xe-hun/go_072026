@@ -29,6 +29,7 @@ type CreateDeviceParams struct {
 	ProtocolVersion int32       `json:"protocol_version"`
 }
 
+// Inserts a user-owned sync device and returns its stored state.
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (SyncDevice, error) {
 	row := q.db.QueryRow(ctx, createDevice,
 		arg.ID,
@@ -66,6 +67,7 @@ type GetDeviceForOwnerParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// Fetches one device with owner scoping.
 func (q *Queries) GetDeviceForOwner(ctx context.Context, arg GetDeviceForOwnerParams) (SyncDevice, error) {
 	row := q.db.QueryRow(ctx, getDeviceForOwner, arg.ID, arg.OwnerID)
 	var i SyncDevice
@@ -97,6 +99,7 @@ type GetDeviceForOwnerForUpdateParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// Fetches and locks one device for cursor/last_seen updates.
 func (q *Queries) GetDeviceForOwnerForUpdate(ctx context.Context, arg GetDeviceForOwnerForUpdateParams) (SyncDevice, error) {
 	row := q.db.QueryRow(ctx, getDeviceForOwnerForUpdate, arg.ID, arg.OwnerID)
 	var i SyncDevice
@@ -122,6 +125,7 @@ WHERE owner_id = $1
 ORDER BY created_at DESC
 `
 
+// Returns all devices for a user, including revoked devices.
 func (q *Queries) ListDevices(ctx context.Context, ownerID pgtype.UUID) ([]SyncDevice, error) {
 	rows, err := q.db.Query(ctx, listDevices, ownerID)
 	if err != nil {
@@ -167,6 +171,7 @@ type RevokeDeviceParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// Soft-revokes a device so future sync calls are rejected.
 func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) error {
 	_, err := q.db.Exec(ctx, revokeDevice, arg.ID, arg.OwnerID)
 	return err
@@ -186,6 +191,7 @@ type UpdateDeviceCursorParams struct {
 	LastGlobalCursor int64       `json:"last_global_cursor"`
 }
 
+// Advances the cursor without allowing it to move backwards.
 func (q *Queries) UpdateDeviceCursor(ctx context.Context, arg UpdateDeviceCursorParams) error {
 	_, err := q.db.Exec(ctx, updateDeviceCursor, arg.ID, arg.OwnerID, arg.LastGlobalCursor)
 	return err

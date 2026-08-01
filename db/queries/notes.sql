@@ -1,10 +1,12 @@
 -- name: GetNoteForOwner :one
+-- Reads one note with owner scoping.
 SELECT *
 FROM notes
 WHERE id = $1
   AND owner_id = $2;
 
 -- name: GetNoteForOwnerForUpdate :one
+-- Reads and locks one note before mutation.
 SELECT *
 FROM notes
 WHERE id = $1
@@ -12,12 +14,14 @@ WHERE id = $1
 FOR UPDATE;
 
 -- name: ListBlocksForNote :many
+-- Returns all blocks for a note in fractional position order.
 SELECT *
 FROM note_blocks
 WHERE note_id = $1
 ORDER BY position ASC, created_at ASC;
 
 -- name: GetBlockForNoteForUpdate :one
+-- Reads and locks one block before mutation.
 SELECT *
 FROM note_blocks
 WHERE id = $1
@@ -25,6 +29,7 @@ WHERE id = $1
 FOR UPDATE;
 
 -- name: CreateNote :one
+-- Inserts current note state.
 INSERT INTO notes (
     id, owner_id, category_id, title, metadata, current_version
 ) VALUES (
@@ -33,6 +38,7 @@ INSERT INTO notes (
 RETURNING *;
 
 -- name: UpdateNoteState :one
+-- Writes current note state after service-level version checks.
 UPDATE notes
 SET category_id = $3,
     title = $4,
@@ -45,6 +51,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: CreateBlock :one
+-- Inserts current block state.
 INSERT INTO note_blocks (
     id, note_id, block_type, text_content, position, properties, current_version
 ) VALUES (
@@ -53,6 +60,7 @@ INSERT INTO note_blocks (
 RETURNING *;
 
 -- name: UpdateBlockState :one
+-- Writes current block state after service-level version checks.
 UPDATE note_blocks
 SET block_type = $3,
     text_content = $4,
@@ -64,4 +72,3 @@ SET block_type = $3,
 WHERE id = $1
   AND note_id = $2
 RETURNING *;
-

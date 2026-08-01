@@ -10,10 +10,13 @@ import (
 	db "notes-server/db/generated"
 )
 
+// pgUUID converts google/uuid values into pgx nullable UUID values for sqlc
+// parameters.
 func pgUUID(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: true}
 }
 
+// pgText converts optional strings into pgx nullable text.
 func pgText(value *string) pgtype.Text {
 	if value == nil {
 		return pgtype.Text{}
@@ -21,6 +24,7 @@ func pgText(value *string) pgtype.Text {
 	return pgtype.Text{String: *value, Valid: true}
 }
 
+// pgInt8 converts optional int64 values into pgx nullable int8.
 func pgInt8(value *int64) pgtype.Int8 {
 	if value == nil {
 		return pgtype.Int8{}
@@ -28,6 +32,8 @@ func pgInt8(value *int64) pgtype.Int8 {
 	return pgtype.Int8{Int64: *value, Valid: true}
 }
 
+// pgTime converts zero time into NULL and non-zero time into timestamptz. It is
+// available for future query parameters that need optional timestamps.
 func pgTime(value time.Time) pgtype.Timestamptz {
 	if value.IsZero() {
 		return pgtype.Timestamptz{}
@@ -35,6 +41,8 @@ func pgTime(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: value, Valid: true}
 }
 
+// fromDBDevice maps a sqlc device model into the store model consumed by
+// services.
 func fromDBDevice(value db.SyncDevice) SyncDevice {
 	return SyncDevice{
 		ID:               uuid.UUID(value.ID.Bytes),
@@ -50,6 +58,7 @@ func fromDBDevice(value db.SyncDevice) SyncDevice {
 	}
 }
 
+// fromDBNote maps a generated note row and normalizes JSONB fields.
 func fromDBNote(value db.Note) Note {
 	return Note{
 		ID:             uuid.UUID(value.ID.Bytes),
@@ -64,6 +73,7 @@ func fromDBNote(value db.Note) Note {
 	}
 }
 
+// fromDBBlock maps a generated block row and normalizes JSONB fields.
 func fromDBBlock(value db.NoteBlock) NoteBlock {
 	return NoteBlock{
 		ID:             uuid.UUID(value.ID.Bytes),
@@ -79,6 +89,8 @@ func fromDBBlock(value db.NoteBlock) NoteBlock {
 	}
 }
 
+// fromDBChange maps generated change history rows. global_sequence is generated
+// by PostgreSQL and represented by sqlc as nullable pgtype.Int8.
 func fromDBChange(value db.NoteChange) NoteChange {
 	sequence := int64(0)
 	if value.GlobalSequence.Valid {
@@ -105,6 +117,7 @@ func fromDBChange(value db.NoteChange) NoteChange {
 	}
 }
 
+// fromDBSnapshot maps generated snapshot rows.
 func fromDBSnapshot(value db.NoteSnapshot) NoteSnapshot {
 	return NoteSnapshot{
 		ID:             uuid.UUID(value.ID.Bytes),
@@ -119,6 +132,7 @@ func fromDBSnapshot(value db.NoteSnapshot) NoteSnapshot {
 	}
 }
 
+// fromDBOutboxJob maps generated outbox job rows.
 func fromDBOutboxJob(value db.OutboxJob) OutboxJob {
 	return OutboxJob{
 		ID:          value.ID,

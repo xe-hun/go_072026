@@ -11,6 +11,8 @@ import (
 	"notes-server/internal/store"
 )
 
+// TestEncodeSnapshotProducesStableChecksum verifies checksum generation is
+// deterministic for the same snapshot document.
 func TestEncodeSnapshotProducesStableChecksum(t *testing.T) {
 	doc := SnapshotDocument{
 		SchemaVersion: 1,
@@ -45,6 +47,8 @@ func TestEncodeSnapshotProducesStableChecksum(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshotDocumentIncludesDeletedBlocks protects tombstone preservation
+// in full-note snapshots.
 func TestBuildSnapshotDocumentIncludesDeletedBlocks(t *testing.T) {
 	deletedAt := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
 	doc := store.NoteDocument{

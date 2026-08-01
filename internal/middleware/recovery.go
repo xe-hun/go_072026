@@ -7,6 +7,8 @@ import (
 	"notes-server/internal/httpapi"
 )
 
+// Recovery catches panics, logs them with the request ID, and returns a generic
+// internal error so implementation details are not exposed to clients.
 func Recovery(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,4 +1,5 @@
 -- +goose Up
+-- categories are user-owned labels that can group notes.
 CREATE TABLE categories (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -9,6 +10,8 @@ CREATE TABLE categories (
     UNIQUE (owner_id, name)
 );
 
+-- notes stores current note-level state. Blocks are stored separately so they
+-- can be ordered, versioned, and synced independently.
 CREATE TABLE notes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -28,6 +31,8 @@ CREATE INDEX notes_owner_category_idx
     ON notes (owner_id, category_id)
     WHERE deleted_at IS NULL;
 
+-- note_blocks stores current block-level state. position is a string fractional
+-- index, not a permanent integer array position.
 CREATE TABLE note_blocks (
     id UUID PRIMARY KEY,
     note_id UUID NOT NULL REFERENCES notes(id),
@@ -45,6 +50,7 @@ CREATE TABLE note_blocks (
 CREATE INDEX note_blocks_note_position_idx
     ON note_blocks (note_id, position);
 
+-- sync_devices tracks every client device that can call /v1/sync for a user.
 CREATE TABLE sync_devices (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -61,6 +67,8 @@ CREATE TABLE sync_devices (
 CREATE INDEX sync_devices_owner_idx
     ON sync_devices (owner_id);
 
+-- note_changes is append-only sync history. Each accepted client operation must
+-- insert exactly one row here in the same transaction as current-state updates.
 CREATE TABLE note_changes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -89,6 +97,8 @@ CREATE INDEX note_changes_owner_sequence_idx
 CREATE INDEX note_changes_note_version_idx
     ON note_changes (note_id, resulting_note_version);
 
+-- note_snapshots stores periodic full-note documents for resync and future
+-- compaction/rebuild workflows.
 CREATE TABLE note_snapshots (
     id UUID PRIMARY KEY,
     note_id UUID NOT NULL REFERENCES notes(id),
@@ -102,6 +112,8 @@ CREATE TABLE note_snapshots (
     UNIQUE (note_id, version)
 );
 
+-- outbox_jobs is the PostgreSQL-backed background job queue. Workers claim rows
+-- with SKIP LOCKED so multiple worker processes can run concurrently.
 CREATE TABLE outbox_jobs (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     job_type TEXT NOT NULL,
@@ -127,4 +139,3 @@ DROP TABLE IF EXISTS sync_devices;
 DROP TABLE IF EXISTS note_blocks;
 DROP TABLE IF EXISTS notes;
 DROP TABLE IF EXISTS categories;
-

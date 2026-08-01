@@ -9,6 +9,8 @@ import (
 	db "notes-server/db/generated"
 )
 
+// FindProcessedOperation looks up an operation by the idempotency key
+// (device_id, client_operation_id).
 func (s *Store) FindProcessedOperation(ctx context.Context, deviceID, operationID uuid.UUID) (NoteChange, error) {
 	change, err := s.q.FindProcessedOperation(ctx, db.FindProcessedOperationParams{
 		DeviceID:          pgUUID(deviceID),
@@ -17,9 +19,11 @@ func (s *Store) FindProcessedOperation(ctx context.Context, deviceID, operationI
 	return fromDBChange(change), mapNoRows(err)
 }
 
+// InsertNoteChange appends the immutable history row for an accepted operation.
 func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams) (NoteChange, error) {
 	blockID := pgtype.UUID{}
 	if arg.BlockID != nil {
+		// Note-level changes intentionally leave block_id NULL.
 		blockID = pgUUID(*arg.BlockID)
 	}
 	change, err := s.q.InsertNoteChange(ctx, db.InsertNoteChangeParams{
@@ -42,6 +46,8 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 	return fromDBChange(change), err
 }
 
+// GetChangesAfterCursor returns remote changes after a cursor, excluding changes
+// submitted by the requesting device.
 func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID uuid.UUID, limit int32) ([]NoteChange, error) {
 	rows, err := s.q.GetChangesAfterCursor(ctx, db.GetChangesAfterCursorParams{
 		OwnerID:        pgUUID(ownerID),
@@ -59,10 +65,12 @@ func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cu
 	return changes, nil
 }
 
+// CountChangesSinceLastSnapshot measures snapshot eligibility by change count.
 func (s *Store) CountChangesSinceLastSnapshot(ctx context.Context, noteID uuid.UUID) (int64, error) {
 	return s.q.CountChangesSinceLastSnapshot(ctx, pgUUID(noteID))
 }
 
+// SumChangeBytesSinceLastSnapshot measures snapshot eligibility by payload size.
 func (s *Store) SumChangeBytesSinceLastSnapshot(ctx context.Context, noteID uuid.UUID) (int64, error) {
 	return s.q.SumChangeBytesSinceLastSnapshot(ctx, pgUUID(noteID))
 }

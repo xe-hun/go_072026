@@ -10,31 +10,55 @@ import (
 	"time"
 )
 
+// Config is the immutable runtime configuration used by both the API and worker.
+// Values are read once at startup so the rest of the code can depend on a stable,
+// validated configuration object.
 type Config struct {
-	AppEnv   string
-	Port     string
+	// AppEnv names the runtime environment, for example development or production.
+	AppEnv string
+	// Port is the HTTP port used by the API process.
+	Port string
+	// LogLevel controls slog verbosity.
 	LogLevel string
 
-	DatabaseURL      string
+	// DatabaseURL is the PostgreSQL connection string.
+	DatabaseURL string
+	// MaxDBConnections limits the pgxpool size per process.
 	MaxDBConnections int32
 
-	JWTIssuer   string
+	// JWTIssuer must match the issuer claim in accepted access tokens.
+	JWTIssuer string
+	// JWTAudience must match the audience claim in accepted access tokens.
 	JWTAudience string
-	JWTJWKSURL  string
+	// JWTJWKSURL points to the JSON Web Key Set used to verify JWT signatures.
+	JWTJWKSURL string
 
-	SyncMaxOperations       int
-	SyncDefaultPullLimit    int
-	SyncMaxPullLimit        int
+	// SyncMaxOperations caps the number of operations accepted in one sync batch.
+	SyncMaxOperations int
+	// SyncDefaultPullLimit is used when the client omits a pull limit.
+	SyncDefaultPullLimit int
+	// SyncMaxPullLimit prevents very large pull responses.
+	SyncMaxPullLimit int
+	// SnapshotChangeThreshold queues snapshots after this many changes.
 	SnapshotChangeThreshold int64
-	SnapshotByteThreshold   int64
-	ChangeRetentionDays     int
+	// SnapshotByteThreshold queues snapshots after this much change payload data.
+	SnapshotByteThreshold int64
+	// ChangeRetentionDays is reserved for cleanup/compaction policy.
+	ChangeRetentionDays int
 
-	RequestTimeout              time.Duration
-	MaxCompressedRequestBytes   int64
+	// RequestTimeout bounds handler execution time.
+	RequestTimeout time.Duration
+	// MaxCompressedRequestBytes limits the wire-size request body.
+	MaxCompressedRequestBytes int64
+	// MaxDecompressedRequestBytes limits the expanded gzip body.
 	MaxDecompressedRequestBytes int64
 }
 
+// Load reads .env for local development, reads process environment variables,
+// applies defaults for optional values, and validates required values.
 func Load() (Config, error) {
+	// Missing .env is allowed: production deployments usually supply real
+	// environment variables directly.
 	_ = loadDotEnv(".env")
 
 	cfg := Config{
@@ -63,6 +87,8 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// Validate checks settings that would make the process unsafe or unable to
+// serve requests if left unset.
 func (c Config) Validate() error {
 	var missing []string
 	required := map[string]string{
@@ -97,6 +123,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// get returns a trimmed environment value or the supplied fallback.
 func get(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
@@ -104,6 +131,8 @@ func get(key, fallback string) string {
 	return fallback
 }
 
+// getInt returns an integer environment value or the fallback when absent or
+// malformed. Validation later catches impossible values.
 func getInt(key string, fallback int) int {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -116,6 +145,8 @@ func getInt(key string, fallback int) int {
 	return parsed
 }
 
+// loadDotEnv is a small development-only .env loader. It intentionally supports
+// simple KEY=value files and avoids adding another runtime dependency.
 func loadDotEnv(path string) error {
 	file, err := os.Open(path)
 	if err != nil {

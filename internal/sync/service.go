@@ -16,16 +16,26 @@ import (
 	"notes-server/internal/store"
 )
 
+// Service owns sync business rules. It is deliberately above the store layer so
+// transactions can include both current-state writes and change-log inserts.
 type Service struct {
-	store                   *store.Store
-	logger                  *slog.Logger
-	maxOperations           int
-	defaultPullLimit        int32
-	maxPullLimit            int32
+	// store is the persistence boundary.
+	store *store.Store
+	// logger records aggregate sync outcomes without logging note content.
+	logger *slog.Logger
+	// maxOperations bounds batch size.
+	maxOperations int
+	// defaultPullLimit is used when clients omit limit.
+	defaultPullLimit int32
+	// maxPullLimit caps response size.
+	maxPullLimit int32
+	// snapshotChangeThreshold controls snapshot job enqueueing by count.
 	snapshotChangeThreshold int64
-	snapshotByteThreshold   int64
+	// snapshotByteThreshold controls snapshot job enqueueing by payload bytes.
+	snapshotByteThreshold int64
 }
 
+// NewService builds a sync service using validated runtime limits.
 func NewService(store *store.Store, cfg config.Config, logger *slog.Logger) *Service {
 	return &Service{
 		store:                   store,
@@ -38,6 +48,9 @@ func NewService(store *store.Store, cfg config.Config, logger *slog.Logger) *Ser
 	}
 }
 
+// Sync applies client operations and pulls remote changes in one transaction.
+// A valid request can contain accepted and rejected operations; only
+// request-level failures return an HTTP error.
 func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Response, error) {
 	if req.ProtocolVersion != ProtocolVersion {
 		return Response{}, httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
@@ -51,6 +64,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 
 	limit := req.Limit
 	if limit == 0 {
+		// Defaulting keeps clients simple while still bounding pull response size.
 		limit = s.defaultPullLimit
 	}
 	if limit < 1 {
@@ -68,6 +82,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 	}
 
 	err := s.store.WithTx(ctx, func(tx *store.Store) error {
+		// Lock the device row so cursor updates for the same device serialize.
 		device, err := tx.GetDeviceForOwnerForUpdate(ctx, req.DeviceID, ownerID)
 		if errors.Is(err, store.ErrNotFound) {
 			return httpapi.Forbidden("Device does not belong to the authenticated user.")
@@ -80,6 +95,8 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 		}
 
 		for _, op := range req.Operations {
+			// Each operation is independently accepted or rejected. Only database
+			// failures abort the whole transaction.
 			accepted, rejected, err := s.applyOperation(ctx, tx, ownerID, req.DeviceID, op)
 			if err != nil {
 				return err
@@ -93,6 +110,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 			}
 		}
 
+		// Pull one extra row to discover whether another page exists.
 		changes, err := tx.GetChangesAfterCursor(ctx, ownerID, req.Cursor, req.DeviceID, limit+1)
 		if err != nil {
 			return err
@@ -106,6 +124,8 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 			resp.Changes = append(resp.Changes, mapPulledChange(change))
 		}
 
+		// Cursor update is committed with the same transaction as operation
+		// application and pull calculation.
 		resp.NextCursor = nextCursor(req.Cursor, resp.Accepted, resp.Changes, resp.HasMore)
 		return tx.UpdateDeviceCursor(ctx, req.DeviceID, ownerID, resp.NextCursor)
 	})
@@ -124,8 +144,13 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 	return resp, nil
 }
 
+// applyOperation handles one operation from a sync batch. It first checks the
+// idempotency table, then validates shape and dispatches to the concrete
+// operation implementation.
 func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedOperation, *RejectedOperation, error) {
 	if processed, err := tx.FindProcessedOperation(ctx, deviceID, op.OperationID); err == nil {
+		// A retry returns the original accepted result and does not mutate state
+		// again.
 		accepted := acceptedFromChange(processed)
 		return &accepted, nil, nil
 	} else if !errors.Is(err, store.ErrNotFound) {
@@ -158,6 +183,8 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 	}
 }
 
+// createNote applies create_note. A new note must be based on version 0 and
+// results in note version 1.
 func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
 	if op.BaseNoteVersion != 0 {
 		rejected := rejectedConflict(op, 0, nil)
@@ -211,7 +238,10 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 	return &accepted, nil, nil
 }
 
+// mutateNote applies update/delete/restore operations for existing notes.
 func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+	// The note row is locked before version checks so concurrent edits to the
+	// same note serialize.
 	note, err := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
 		rejected := rejectedNotFound(op, "Note not found.")
@@ -221,11 +251,14 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 		return nil, nil, err
 	}
 	if note.CurrentVersion != op.BaseNoteVersion {
+		// The client edited stale state. Return an explicit conflict rather than
+		// overwriting.
 		rejected := rejectedConflict(op, note.CurrentVersion, nil)
 		return nil, &rejected, nil
 	}
 
 	baseVersion := note.CurrentVersion
+	// Every note-level mutation increments the note version.
 	note.CurrentVersion++
 
 	switch op.OperationType {
@@ -249,6 +282,8 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 			note.CategoryID = categoryID
 		}
 	case OperationDeleteNote:
+		// Deletion is soft: the row remains so tombstones can sync to offline
+		// devices.
 		note.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	case OperationRestoreNote:
 		note.DeletedAt = pgtype.Timestamptz{}
@@ -269,7 +304,11 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 	return &accepted, nil, nil
 }
 
+// createBlock applies create_block. It increments the parent note version and
+// creates the block at version 1.
 func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+	// Lock the parent note first because the note version is the global version
+	// for all block mutations within the note.
 	note, err := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
 		rejected := rejectedNotFound(op, "Note not found.")
@@ -315,6 +354,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	}
 
 	baseNoteVersion := note.CurrentVersion
+	// A block create is also a note mutation.
 	note.CurrentVersion++
 	if _, err := tx.UpdateNoteState(ctx, note); err != nil {
 		return nil, nil, err
@@ -344,7 +384,10 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	return &accepted, nil, nil
 }
 
+// mutateBlock applies update/move/delete/restore operations for existing blocks.
 func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+	// Lock order is note first, block second. Keeping this order everywhere avoids
+	// avoidable deadlocks when multiple API instances edit the same note.
 	note, err := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
 		rejected := rejectedNotFound(op, "Note not found.")
@@ -367,6 +410,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		return nil, nil, err
 	}
 	if op.BaseBlockVersion == nil || block.CurrentVersion != *op.BaseBlockVersion {
+		// Existing block mutations must include the block version they edited.
 		serverBlockVersion := block.CurrentVersion
 		rejected := rejectedConflict(op, note.CurrentVersion, &serverBlockVersion)
 		return nil, &rejected, nil
@@ -374,6 +418,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 
 	baseNoteVersion := note.CurrentVersion
 	baseBlockVersion := block.CurrentVersion
+	// A block mutation increments both version levels.
 	note.CurrentVersion++
 	block.CurrentVersion++
 
@@ -409,6 +454,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		}
 		block.Position = position
 	case OperationDeleteBlock:
+		// Deletion is soft so offline devices can receive the tombstone later.
 		block.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	case OperationRestoreBlock:
 		block.DeletedAt = pgtype.Timestamptz{}
@@ -433,6 +479,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	return &accepted, nil, nil
 }
 
+// insertChange writes the append-only history row for an accepted operation.
 func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64, baseBlockVersion, resultingBlockVersion *int64) (store.NoteChange, error) {
 	return tx.InsertNoteChange(ctx, store.InsertNoteChangeParams{
 		ID:                    uuid.New(),
@@ -453,6 +500,8 @@ func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, de
 	})
 }
 
+// enqueueSnapshotIfNeeded evaluates configured thresholds and inserts a snapshot
+// outbox job when the note has enough unsnapshotted history.
 func (s *Service) enqueueSnapshotIfNeeded(ctx context.Context, tx *store.Store, noteID, ownerID uuid.UUID, resultingVersion int64) error {
 	if s.snapshotChangeThreshold <= 0 && s.snapshotByteThreshold <= 0 {
 		return nil
@@ -473,6 +522,8 @@ func (s *Service) enqueueSnapshotIfNeeded(ctx context.Context, tx *store.Store, 
 	return nil
 }
 
+// acceptedFromChange maps a stored change to the accepted response shape. It is
+// used for both first-time accepts and idempotent retries.
 func acceptedFromChange(change store.NoteChange) AcceptedOperation {
 	return AcceptedOperation{
 		OperationID:  change.ClientOperationID,
@@ -484,6 +535,7 @@ func acceptedFromChange(change store.NoteChange) AcceptedOperation {
 	}
 }
 
+// mapPulledChange maps a change-log row into the pull response shape.
 func mapPulledChange(change store.NoteChange) PulledChange {
 	return PulledChange{
 		ID:                    change.ID,
@@ -505,6 +557,9 @@ func mapPulledChange(change store.NoteChange) PulledChange {
 	}
 }
 
+// nextCursor calculates the cursor the client should persist after this
+// response. When a pull page has more rows, the cursor must stop at the last
+// returned pulled change so the next page is not skipped.
 func nextCursor(start int64, accepted []AcceptedOperation, changes []PulledChange, hasMore bool) int64 {
 	if hasMore && len(changes) > 0 {
 		return changes[len(changes)-1].Sequence

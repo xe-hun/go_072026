@@ -24,6 +24,9 @@ import (
 )
 
 func main() {
+	// The API process is intentionally stateless. Startup gathers all durable
+	// dependencies up front, then passes them through constructors so packages do
+	// not depend on global database or logger variables.
 	ctx := context.Background()
 	cfg, err := config.Load()
 	if err != nil {
@@ -32,6 +35,8 @@ func main() {
 	}
 	logger := newLogger(cfg.LogLevel)
 
+	// Store owns the pgx connection pool and the sqlc query wrapper. The pool is
+	// created once per process and closed during graceful shutdown.
 	st, err := store.Open(ctx, cfg)
 	if err != nil {
 		logger.Error("open database", "error", err)
@@ -39,6 +44,8 @@ func main() {
 	}
 	defer st.Close()
 
+	// The verifier downloads the JWKS at startup so a bad auth configuration is
+	// detected before the server accepts traffic.
 	verifier, err := auth.NewVerifier(ctx, cfg.JWTIssuer, cfg.JWTAudience, cfg.JWTJWKSURL)
 	if err != nil {
 		logger.Error("initialize jwt verifier", "error", err)
@@ -57,6 +64,8 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
+		// ListenAndServe blocks, so it runs in a goroutine while the main goroutine
+		// waits for either a process signal or a server error.
 		logger.Info("starting api", "addr", server.Addr)
 		errCh <- server.ListenAndServe()
 	}()
@@ -76,6 +85,8 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// Shutdown stops accepting new connections and gives in-flight requests a
+	// short window to finish before the process exits.
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
 		os.Exit(1)
@@ -84,6 +95,8 @@ func main() {
 }
 
 func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier) http.Handler {
+	// Services contain business rules; handlers only decode/encode HTTP data.
+	// This mirrors the intended flow: handler -> service -> store/sqlc.
 	deviceService := devices.NewService(st)
 	deviceHandler := devices.NewHandler(deviceService)
 	noteService := notes.NewService(st)
@@ -92,6 +105,8 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	syncHandler := syncapi.NewHandler(syncService)
 
 	r := chi.NewRouter()
+	// Global middleware applies to both public and authenticated routes. Request
+	// ID is first so later middleware and error responses can include it.
 	r.Use(apimw.RequestID)
 	r.Use(apimw.Recovery(logger))
 	r.Use(apimw.RequestLogging(logger))
@@ -102,9 +117,12 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	r.Use(apimw.GzipResponse)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		// Health is process-only and does not touch PostgreSQL. It is suitable for
+		// container liveness checks.
 		httpapi.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		// Readiness confirms the process can currently reach PostgreSQL.
 		if err := st.Ping(r.Context()); err != nil {
 			httpapi.WriteError(w, r, httpapi.NewError(http.StatusServiceUnavailable, httpapi.CodeInternalError, "Database is not ready."))
 			return
@@ -113,6 +131,8 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	})
 
 	r.Route("/v1", func(r chi.Router) {
+		// All versioned product routes require a valid bearer token. The middleware
+		// writes auth.Claims to context for downstream handlers/services.
 		r.Use(auth.Middleware(verifier))
 		r.Mount("/devices", deviceHandler.Routes())
 		r.Post("/sync", syncHandler.ServeHTTP)
@@ -122,6 +142,8 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 }
 
 func newLogger(level string) *slog.Logger {
+	// slog's JSON handler gives structured logs that can be shipped directly to
+	// Cloud Run or another container log collector.
 	var slogLevel slog.Level
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":

@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// TestValidateOperationShapeRequiresBlockID protects the rule that every block
+// operation must name the target block.
 func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
 	op := ClientOperation{
 		OperationID:   uuid.New(),
@@ -19,6 +21,8 @@ func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
 	}
 }
 
+// TestDecodeFieldsRejectsUnsupportedSchemaVersion ensures clients cannot submit
+// future/unknown change schemas silently.
 func TestDecodeFieldsRejectsUnsupportedSchemaVersion(t *testing.T) {
 	raw := json.RawMessage(`{"schemaVersion":2,"fields":{"title":"x"}}`)
 	if _, err := decodeFields(raw); err == nil {
@@ -26,6 +30,8 @@ func TestDecodeFieldsRejectsUnsupportedSchemaVersion(t *testing.T) {
 	}
 }
 
+// TestNextCursorUsesLastPulledChangeWhenHasMore prevents pagination gaps when a
+// response is only one page of a larger pull result.
 func TestNextCursorUsesLastPulledChangeWhenHasMore(t *testing.T) {
 	accepted := []AcceptedOperation{{Sequence: 50}}
 	changes := []PulledChange{{Sequence: 11}, {Sequence: 12}}
@@ -35,6 +41,8 @@ func TestNextCursorUsesLastPulledChangeWhenHasMore(t *testing.T) {
 	}
 }
 
+// TestNextCursorIncludesAcceptedSequenceWhenPullIsExhausted allows the cursor to
+// advance past locally accepted operations when no pull page remains.
 func TestNextCursorIncludesAcceptedSequenceWhenPullIsExhausted(t *testing.T) {
 	accepted := []AcceptedOperation{{Sequence: 50}}
 	changes := []PulledChange{{Sequence: 11}, {Sequence: 12}}
@@ -44,6 +52,7 @@ func TestNextCursorIncludesAcceptedSequenceWhenPullIsExhausted(t *testing.T) {
 	}
 }
 
+// TestValidateBlockType protects the initial block type allow-list.
 func TestValidateBlockType(t *testing.T) {
 	for _, blockType := range []string{"text", "bullet", "todo", "numbered_list", "attachment"} {
 		if err := validateBlockType(blockType); err != nil {

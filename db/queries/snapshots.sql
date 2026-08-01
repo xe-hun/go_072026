@@ -1,4 +1,5 @@
 -- name: GetLatestSnapshotForNote :one
+-- Returns the newest snapshot for a user-owned note.
 SELECT *
 FROM note_snapshots
 WHERE note_id = $1
@@ -7,6 +8,7 @@ ORDER BY version DESC
 LIMIT 1;
 
 -- name: InsertSnapshot :one
+-- Stores a snapshot and makes retries idempotent by note/version.
 INSERT INTO note_snapshots (
     id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum
 ) VALUES (
@@ -18,11 +20,13 @@ SET snapshot_data = EXCLUDED.snapshot_data,
 RETURNING *;
 
 -- name: EnqueueOutboxJob :one
+-- Inserts a background job.
 INSERT INTO outbox_jobs (job_type, payload, available_at)
 VALUES ($1, $2, COALESCE($3, now()))
 RETURNING *;
 
 -- name: ClaimOutboxJob :one
+-- Claims one available job safely across multiple workers.
 WITH candidate AS (
     SELECT id
     FROM outbox_jobs
@@ -42,6 +46,7 @@ WHERE j.id = candidate.id
 RETURNING j.*;
 
 -- name: CompleteOutboxJob :exec
+-- Marks a claimed job as complete.
 UPDATE outbox_jobs
 SET completed_at = now(),
     locked_at = NULL,
@@ -50,10 +55,10 @@ SET completed_at = now(),
 WHERE id = $1;
 
 -- name: FailOutboxJob :exec
+-- Releases a failed job and schedules retry.
 UPDATE outbox_jobs
 SET locked_at = NULL,
     locked_by = NULL,
     last_error = $2,
     available_at = now() + make_interval(secs => $3)
 WHERE id = $1;
-

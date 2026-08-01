@@ -15,6 +15,8 @@ import (
 )
 
 func main() {
+	// NotifyContext cancels the root context on Ctrl+C or SIGTERM. The worker
+	// loop observes this context between jobs so shutdown is cooperative.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -25,6 +27,8 @@ func main() {
 	}
 	logger := newLogger(cfg.LogLevel)
 
+	// The worker has its own database pool because it is a separate process from
+	// the API. It still uses the same store/sqlc persistence boundary.
 	st, err := store.Open(ctx, cfg)
 	if err != nil {
 		logger.Error("open database", "error", err)
@@ -32,6 +36,8 @@ func main() {
 	}
 	defer st.Close()
 
+	// An empty worker ID tells NewWorker to generate a stable process-local ID for
+	// lock ownership logs and outbox job claims.
 	worker := jobs.NewWorker(st, logger, "")
 	logger.Info("starting worker")
 	if err := worker.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -42,6 +48,8 @@ func main() {
 }
 
 func newLogger(level string) *slog.Logger {
+	// Keep worker logging behavior aligned with the API so both processes produce
+	// the same JSON log shape.
 	var slogLevel slog.Level
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":

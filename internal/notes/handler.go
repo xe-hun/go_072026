@@ -10,14 +10,17 @@ import (
 	"notes-server/internal/httpapi"
 )
 
+// Handler owns the direct note read endpoints mounted at /v1/notes.
 type Handler struct {
 	service *Service
 }
 
+// NewHandler constructs a note handler with its service dependency.
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// Routes returns the note subrouter.
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/{noteId}", h.get)
@@ -25,6 +28,7 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
+// get handles GET /v1/notes/{noteId}.
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
@@ -44,6 +48,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, note)
 }
 
+// snapshot handles GET /v1/notes/{noteId}/snapshot.
 func (h *Handler) snapshot(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {

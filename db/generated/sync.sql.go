@@ -22,6 +22,7 @@ WHERE c.note_id = $1
   ), 0)
 `
 
+// Counts unsnapshotted changes for snapshot threshold checks.
 func (q *Queries) CountChangesSinceLastSnapshot(ctx context.Context, noteID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countChangesSinceLastSnapshot, noteID)
 	var column_1 int64
@@ -41,6 +42,7 @@ type FindProcessedOperationParams struct {
 	ClientOperationID pgtype.UUID `json:"client_operation_id"`
 }
 
+// Looks up an operation by the idempotency key.
 func (q *Queries) FindProcessedOperation(ctx context.Context, arg FindProcessedOperationParams) (NoteChange, error) {
 	row := q.db.QueryRow(ctx, findProcessedOperation, arg.DeviceID, arg.ClientOperationID)
 	var i NoteChange
@@ -83,6 +85,7 @@ type GetChangesAfterCursorParams struct {
 	Limit          int32       `json:"limit"`
 }
 
+// Pulls remote changes after a cursor, excluding the calling device.
 func (q *Queries) GetChangesAfterCursor(ctx context.Context, arg GetChangesAfterCursorParams) ([]NoteChange, error) {
 	rows, err := q.db.Query(ctx, getChangesAfterCursor,
 		arg.OwnerID,
@@ -167,6 +170,7 @@ type InsertNoteChangeParams struct {
 	ChangeData            []byte      `json:"change_data"`
 }
 
+// Appends one accepted operation to sync history.
 func (q *Queries) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams) (NoteChange, error) {
 	row := q.db.QueryRow(ctx, insertNoteChange,
 		arg.ID,
@@ -219,6 +223,7 @@ WHERE c.note_id = $1
   ), 0)
 `
 
+// Sums unsnapshotted change payload bytes for snapshot threshold checks.
 func (q *Queries) SumChangeBytesSinceLastSnapshot(ctx context.Context, noteID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, sumChangeBytesSinceLastSnapshot, noteID)
 	var column_1 int64

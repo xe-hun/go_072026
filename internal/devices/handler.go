@@ -10,14 +10,18 @@ import (
 	"notes-server/internal/httpapi"
 )
 
+// Handler owns the HTTP routes for device management. It performs HTTP parsing
+// and delegates business decisions to Service.
 type Handler struct {
 	service *Service
 }
 
+// NewHandler constructs a device handler with its required service.
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// Routes returns the device subrouter mounted at /v1/devices.
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Post("/", h.register)
@@ -26,6 +30,7 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
+// register handles POST /v1/devices.
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
@@ -45,6 +50,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusCreated, device)
 }
 
+// list handles GET /v1/devices.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
@@ -59,6 +65,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, devices)
 }
 
+// revoke handles DELETE /v1/devices/{deviceId}.
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {

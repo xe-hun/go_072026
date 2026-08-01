@@ -30,6 +30,7 @@ type CreateBlockParams struct {
 	CurrentVersion int64       `json:"current_version"`
 }
 
+// Inserts current block state.
 func (q *Queries) CreateBlock(ctx context.Context, arg CreateBlockParams) (NoteBlock, error) {
 	row := q.db.QueryRow(ctx, createBlock,
 		arg.ID,
@@ -74,6 +75,7 @@ type CreateNoteParams struct {
 	CurrentVersion int64       `json:"current_version"`
 }
 
+// Inserts current note state.
 func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error) {
 	row := q.db.QueryRow(ctx, createNote,
 		arg.ID,
@@ -111,6 +113,7 @@ type GetBlockForNoteForUpdateParams struct {
 	NoteID pgtype.UUID `json:"note_id"`
 }
 
+// Reads and locks one block before mutation.
 func (q *Queries) GetBlockForNoteForUpdate(ctx context.Context, arg GetBlockForNoteForUpdateParams) (NoteBlock, error) {
 	row := q.db.QueryRow(ctx, getBlockForNoteForUpdate, arg.ID, arg.NoteID)
 	var i NoteBlock
@@ -141,6 +144,7 @@ type GetNoteForOwnerParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// Reads one note with owner scoping.
 func (q *Queries) GetNoteForOwner(ctx context.Context, arg GetNoteForOwnerParams) (Note, error) {
 	row := q.db.QueryRow(ctx, getNoteForOwner, arg.ID, arg.OwnerID)
 	var i Note
@@ -171,6 +175,7 @@ type GetNoteForOwnerForUpdateParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// Reads and locks one note before mutation.
 func (q *Queries) GetNoteForOwnerForUpdate(ctx context.Context, arg GetNoteForOwnerForUpdateParams) (Note, error) {
 	row := q.db.QueryRow(ctx, getNoteForOwnerForUpdate, arg.ID, arg.OwnerID)
 	var i Note
@@ -195,6 +200,7 @@ WHERE note_id = $1
 ORDER BY position ASC, created_at ASC
 `
 
+// Returns all blocks for a note in fractional position order.
 func (q *Queries) ListBlocksForNote(ctx context.Context, noteID pgtype.UUID) ([]NoteBlock, error) {
 	rows, err := q.db.Query(ctx, listBlocksForNote, noteID)
 	if err != nil {
@@ -251,6 +257,7 @@ type UpdateBlockStateParams struct {
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
+// Writes current block state after service-level version checks.
 func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStateParams) (NoteBlock, error) {
 	row := q.db.QueryRow(ctx, updateBlockState,
 		arg.ID,
@@ -301,6 +308,7 @@ type UpdateNoteStateParams struct {
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
+// Writes current note state after service-level version checks.
 func (q *Queries) UpdateNoteState(ctx context.Context, arg UpdateNoteStateParams) (Note, error) {
 	row := q.db.QueryRow(ctx, updateNoteState,
 		arg.ID,

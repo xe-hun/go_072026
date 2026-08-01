@@ -10,14 +10,19 @@ import (
 	"notes-server/internal/store"
 )
 
+// Service contains note read/recovery rules. The sync service remains the main
+// write path.
 type Service struct {
 	store *store.Store
 }
 
+// NewService wires note read services to the persistence boundary.
 func NewService(store *store.Store) *Service {
 	return &Service{store: store}
 }
 
+// Get returns a user-owned note and all of its blocks. The ownerID argument
+// comes from the authenticated JWT, not from a client-supplied field.
 func (s *Service) Get(ctx context.Context, ownerID, noteID uuid.UUID) (NoteResponse, error) {
 	doc, err := s.store.GetNoteDocument(ctx, noteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -29,6 +34,7 @@ func (s *Service) Get(ctx context.Context, ownerID, noteID uuid.UUID) (NoteRespo
 	return mapNoteDocument(doc), nil
 }
 
+// LatestSnapshot returns the newest stored snapshot for a note.
 func (s *Service) LatestSnapshot(ctx context.Context, ownerID, noteID uuid.UUID) (SnapshotResponse, error) {
 	snapshot, err := s.store.GetLatestSnapshotForNote(ctx, noteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -50,6 +56,8 @@ func (s *Service) LatestSnapshot(ctx context.Context, ownerID, noteID uuid.UUID)
 	}, nil
 }
 
+// mapNoteDocument converts the store's database-oriented note document into the
+// public JSON response shape.
 func mapNoteDocument(doc store.NoteDocument) NoteResponse {
 	blocks := make([]BlockResponse, 0, len(doc.Blocks))
 	for _, block := range doc.Blocks {

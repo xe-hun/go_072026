@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// TestDecodeJSONRejectsMultipleDocuments makes sure request bodies contain one
+// JSON document only.
 func TestDecodeJSONRejectsMultipleDocuments(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPost, "/", strings.NewReader(`{"ok":true} {"ok":false}`))
 	if err != nil {

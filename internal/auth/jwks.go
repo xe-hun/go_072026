@@ -13,10 +13,13 @@ import (
 	"time"
 )
 
+// keySet matches the top-level JWKS response shape returned by auth providers.
 type keySet struct {
 	Keys []jwkKey `json:"keys"`
 }
 
+// jwkKey contains the RSA fields needed to construct a public key for token
+// verification. The N and E values are base64url-encoded modulus/exponent.
 type jwkKey struct {
 	Kty string `json:"kty"`
 	Kid string `json:"kid"`
@@ -26,16 +29,27 @@ type jwkKey struct {
 	E   string `json:"e"`
 }
 
+// jwksCache keeps public keys in memory for a short period so every request does
+// not need to call the remote JWKS endpoint.
 type jwksCache struct {
-	url    string
+	// url is the configured JWKS endpoint.
+	url string
+	// client is bounded by a timeout so key refresh cannot hang request handling.
 	client *http.Client
-	ttl    time.Duration
+	// ttl controls how long keys are considered fresh.
+	ttl time.Duration
 
-	mu       sync.RWMutex
-	keys     map[string]*rsa.PublicKey
+	// mu protects keys and loadedAt because requests can verify tokens
+	// concurrently.
+	mu sync.RWMutex
+	// keys maps JWT kid header values to RSA public keys.
+	keys map[string]*rsa.PublicKey
+	// loadedAt records when keys were last refreshed.
 	loadedAt time.Time
 }
 
+// newJWKSCache builds the cache with conservative defaults. It does not perform
+// I/O; callers decide when to refresh.
 func newJWKSCache(url string) *jwksCache {
 	return &jwksCache{
 		url:    url,
@@ -45,6 +59,8 @@ func newJWKSCache(url string) *jwksCache {
 	}
 }
 
+// refresh downloads the JWKS document, converts usable RSA keys, and atomically
+// replaces the cache contents.
 func (c *jwksCache) refresh(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
@@ -65,6 +81,8 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 	}
 	keys := make(map[string]*rsa.PublicKey, len(set.Keys))
 	for _, raw := range set.Keys {
+		// Ignore unsupported or malformed keys instead of failing the entire
+		// refresh, as long as at least one usable RSA key remains.
 		if raw.Kty != "RSA" || raw.Kid == "" {
 			continue
 		}
@@ -85,6 +103,8 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 	return nil
 }
 
+// get returns the key for a JWT kid. It uses a fast read lock for fresh keys and
+// refreshes from the remote endpoint when the cache is stale or incomplete.
 func (c *jwksCache) get(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	c.mu.RLock()
 	key, ok := c.keys[kid]
@@ -107,6 +127,8 @@ func (c *jwksCache) get(ctx context.Context, kid string) (*rsa.PublicKey, error)
 	return key, nil
 }
 
+// rsaPublicKey converts the base64url modulus/exponent values from JWK format
+// into the rsa.PublicKey required by the JWT library.
 func rsaPublicKey(n64, e64 string) (*rsa.PublicKey, error) {
 	modulusBytes, err := base64.RawURLEncoding.DecodeString(n64)
 	if err != nil {

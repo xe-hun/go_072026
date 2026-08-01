@@ -36,6 +36,7 @@ type ClaimOutboxJobParams struct {
 	Secs     float64     `json:"secs"`
 }
 
+// Claims one available job safely across multiple workers.
 func (q *Queries) ClaimOutboxJob(ctx context.Context, arg ClaimOutboxJobParams) (OutboxJob, error) {
 	row := q.db.QueryRow(ctx, claimOutboxJob, arg.LockedBy, arg.Secs)
 	var i OutboxJob
@@ -63,6 +64,7 @@ SET completed_at = now(),
 WHERE id = $1
 `
 
+// Marks a claimed job as complete.
 func (q *Queries) CompleteOutboxJob(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, completeOutboxJob, id)
 	return err
@@ -80,6 +82,7 @@ type EnqueueOutboxJobParams struct {
 	Column3 interface{} `json:"column_3"`
 }
 
+// Inserts a background job.
 func (q *Queries) EnqueueOutboxJob(ctx context.Context, arg EnqueueOutboxJobParams) (OutboxJob, error) {
 	row := q.db.QueryRow(ctx, enqueueOutboxJob, arg.JobType, arg.Payload, arg.Column3)
 	var i OutboxJob
@@ -113,6 +116,7 @@ type FailOutboxJobParams struct {
 	Secs      float64     `json:"secs"`
 }
 
+// Releases a failed job and schedules retry.
 func (q *Queries) FailOutboxJob(ctx context.Context, arg FailOutboxJobParams) error {
 	_, err := q.db.Exec(ctx, failOutboxJob, arg.ID, arg.LastError, arg.Secs)
 	return err
@@ -132,6 +136,7 @@ type GetLatestSnapshotForNoteParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
+// Returns the newest snapshot for a user-owned note.
 func (q *Queries) GetLatestSnapshotForNote(ctx context.Context, arg GetLatestSnapshotForNoteParams) (NoteSnapshot, error) {
 	row := q.db.QueryRow(ctx, getLatestSnapshotForNote, arg.NoteID, arg.OwnerID)
 	var i NoteSnapshot
@@ -172,6 +177,7 @@ type InsertSnapshotParams struct {
 	Checksum       string      `json:"checksum"`
 }
 
+// Stores a snapshot and makes retries idempotent by note/version.
 func (q *Queries) InsertSnapshot(ctx context.Context, arg InsertSnapshotParams) (NoteSnapshot, error) {
 	row := q.db.QueryRow(ctx, insertSnapshot,
 		arg.ID,

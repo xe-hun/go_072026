@@ -1,10 +1,12 @@
 -- name: FindProcessedOperation :one
+-- Looks up an operation by the idempotency key.
 SELECT *
 FROM note_changes
 WHERE device_id = $1
   AND client_operation_id = $2;
 
 -- name: InsertNoteChange :one
+-- Appends one accepted operation to sync history.
 INSERT INTO note_changes (
     id,
     owner_id,
@@ -27,6 +29,7 @@ INSERT INTO note_changes (
 RETURNING *;
 
 -- name: GetChangesAfterCursor :many
+-- Pulls remote changes after a cursor, excluding the calling device.
 SELECT *
 FROM note_changes
 WHERE owner_id = $1
@@ -36,6 +39,7 @@ ORDER BY global_sequence ASC
 LIMIT $4;
 
 -- name: CountChangesSinceLastSnapshot :one
+-- Counts unsnapshotted changes for snapshot threshold checks.
 SELECT COUNT(*)::bigint
 FROM note_changes c
 WHERE c.note_id = $1
@@ -46,6 +50,7 @@ WHERE c.note_id = $1
   ), 0);
 
 -- name: SumChangeBytesSinceLastSnapshot :one
+-- Sums unsnapshotted change payload bytes for snapshot threshold checks.
 SELECT COALESCE(SUM(octet_length(change_data::text)), 0)::bigint
 FROM note_changes c
 WHERE c.note_id = $1
@@ -54,4 +59,3 @@ WHERE c.note_id = $1
       FROM note_snapshots
       WHERE note_id = $1
   ), 0);
-
