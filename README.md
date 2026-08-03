@@ -9,7 +9,7 @@ Backend service for an offline-first mobile notes app. It implements JWT-authent
 - PostgreSQL
 - pgx/v5 + pgxpool
 - sqlc query definitions
-- Goose migrations
+- golang-migrate migrations
 - Supabase-compatible JWT/JWKS validation
 - Docker Compose for local PostgreSQL
 - `log/slog`
@@ -47,12 +47,17 @@ make run-worker
 Useful commands:
 
 ```sh
+make migrate-version
 make sqlc
 make test
 make test-integration
 make lint
 make db-reset
 ```
+
+If an existing empty database already has the initial schema from the previous
+Goose migration, initialize golang-migrate bookkeeping with
+`make migrate-force VERSION=1` instead of rerunning the initial migration.
 
 `make db-reset` deletes the local PostgreSQL Docker volume after an explicit confirmation prompt.
 
@@ -88,4 +93,3 @@ Current state updates and change-log inserts happen inside the same PostgreSQL t
 - Text edits are stored as structured operations/changed fields, not raw character diffs.
 - Automatic text conflict merging is intentionally not implemented in v1.
 - Snapshot jobs are queued when configured thresholds are reached; cleanup/compaction hooks are present and deliberately conservative.
-

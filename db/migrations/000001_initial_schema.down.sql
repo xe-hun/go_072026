@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS outbox_jobs;
+DROP TABLE IF EXISTS note_snapshots;
+DROP TABLE IF EXISTS note_changes;
+DROP TABLE IF EXISTS sync_devices;
+DROP TABLE IF EXISTS note_blocks;
+DROP TABLE IF EXISTS notes;
+DROP TABLE IF EXISTS categories;

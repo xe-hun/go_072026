@@ -52,7 +52,7 @@ The API process is stateless. Durable state lives in PostgreSQL. Multiple API in
 
 `internal/jobs` contains the outbox worker and snapshot creation logic.
 
-`db/migrations` contains Goose migrations.
+`db/migrations` contains golang-migrate migrations.
 
 `db/queries` contains sqlc query definitions.
 
@@ -72,7 +72,7 @@ Application dependencies:
 Tooling dependencies:
 
 - `github.com/sqlc-dev/sqlc/cmd/sqlc`: SQL-to-Go code generation
-- `github.com/pressly/goose/v3/cmd/goose`: migrations
+- `github.com/golang-migrate/migrate/v4/cmd/migrate`: migrations
 - Docker Compose: local PostgreSQL
 
 ## Database Model
@@ -233,4 +233,3 @@ make sqlc
 ```
 
 The hand-written `internal/store` package is the stable boundary used by services.
-

@@ -61,7 +61,7 @@ The container should be named `notes-postgres`.
 
 ## 4. Apply Database Migrations
 
-Run the Goose migrations:
+Run the golang-migrate migrations:
 
 ```sh
 make migrate-up
@@ -76,6 +76,10 @@ This creates:
 - `note_changes`
 - `note_snapshots`
 - `outbox_jobs`
+
+If an existing empty database already has this initial schema from the previous
+Goose migration, run `make migrate-force VERSION=1` to mark version `1` as
+applied before adding future migrations.
 
 ## 5. Generate SQL Code
 
@@ -308,4 +312,3 @@ Both load `.env` and use the workspace root as the current working directory.
 `relation does not exist`: Run `make migrate-up`.
 
 `device does not belong to authenticated user`: Register the device using the same JWT user before syncing.
-

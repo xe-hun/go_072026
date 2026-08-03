@@ -1,4 +1,3 @@
--- +goose Up
 -- categories are user-owned labels that can group notes.
 CREATE TABLE categories (
     id UUID PRIMARY KEY,
@@ -130,12 +129,3 @@ CREATE TABLE outbox_jobs (
 CREATE INDEX outbox_jobs_available_idx
     ON outbox_jobs (available_at, id)
     WHERE completed_at IS NULL;
-
--- +goose Down
-DROP TABLE IF EXISTS outbox_jobs;
-DROP TABLE IF EXISTS note_snapshots;
-DROP TABLE IF EXISTS note_changes;
-DROP TABLE IF EXISTS sync_devices;
-DROP TABLE IF EXISTS note_blocks;
-DROP TABLE IF EXISTS notes;
-DROP TABLE IF EXISTS categories;
