@@ -48,6 +48,8 @@ Useful commands:
 
 ```sh
 make migrate-version
+make dev-auth
+make dev-jwks
 make sqlc
 make test
 make test-integration
@@ -60,6 +62,12 @@ Goose migration, initialize golang-migrate bookkeeping with
 `make migrate-force VERSION=1` instead of rerunning the initial migration.
 
 `make db-reset` deletes the local PostgreSQL Docker volume after an explicit confirmation prompt.
+
+For local or non-live testing without a real auth provider, generate a fake
+one-year JWT and JWKS with `make dev-auth`, run the JWKS endpoint with
+`make dev-jwks`, then copy the values from `.dev/auth/env` into `.env`. Use the
+token in `.dev/auth/token.txt` as `Authorization: Bearer <token>`. The generated
+files are ignored by git and must not be used for live user authentication.
 
 VS Code debug configurations are included for the API and worker in `.vscode/launch.json`.
 

@@ -43,6 +43,43 @@ JWT_JWKS_URL=
 
 For Supabase Auth these values normally come from the project auth settings. The API will fail fast on startup if any required value is missing.
 
+For development or a non-live staging environment without a real auth provider,
+generate a fake one-year JWT and matching JWKS:
+
+```sh
+make dev-auth
+```
+
+If `make` is not installed, run:
+
+```sh
+go run ./cmd/devauth generate
+```
+
+Copy the values from `.dev/auth/env` into `.env`:
+
+```env
+JWT_ISSUER=notes-dev
+JWT_AUDIENCE=notes-api
+JWT_JWKS_URL=http://localhost:8081/.well-known/jwks.json
+```
+
+Start the fake JWKS endpoint in a separate terminal before starting the API:
+
+```sh
+make dev-jwks
+```
+
+Without `make`:
+
+```sh
+go run ./cmd/devauth serve
+```
+
+Use `.dev/auth/token.txt` as the bearer token in development requests. These
+generated files are ignored by git and must not be used for live user
+authentication.
+
 ## 3. Start PostgreSQL
 
 Start the local database container:
@@ -133,6 +170,15 @@ All `/v1` routes require a JWT:
 
 ```text
 Authorization: Bearer <JWT>
+```
+
+With the development JWT helper, replace `<JWT>` with the contents of
+`.dev/auth/token.txt`. To create a new fake token and key, rerun
+`make dev-auth`; to keep the same user identity, pass the current subject from
+`.dev/auth/metadata.json`:
+
+```sh
+make dev-auth DEV_JWT_SUBJECT=<SUBJECT_UUID>
 ```
 
 Register a device:
