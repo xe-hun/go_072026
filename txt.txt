@@ -1,0 +1,21 @@
+It’s running.
+API: http://localhost:8080
+Verified: /health -> 200, /ready -> 200
+JWKS helper: http://localhost:8081/.well-known/jwks.json
+Postgres: notes-postgres, healthy on 5432
+Worker: running in background
+Instructions I followed:
+Read the repo docs: README.md, run-instruction.md, Makefile, compose.yaml.
+Verified prerequisites: Go, Docker, Docker Compose, and make.
+Created .env from .env.example.
+Generated local dev JWT/JWKS files with make dev-auth.
+Filled .env with the generated dev auth settings.
+Started Postgres with make db-up.
+Waited for the Postgres container to become healthy.
+Applied migrations with make migrate-up.
+Started the dev JWKS server with make dev-jwks.
+Started the API with make run-api.
+Verified http://localhost:8080/health and /ready.
+Started the worker with make run-worker.
+Confirmed all background processes are still alive.
+Logs and PID files are under .dev/logs. To stop the app later: Stop-Process -Id 7560,13516,20340, and make db-down for Postgre
