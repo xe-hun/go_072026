@@ -3,20 +3,45 @@ services:
     image: postgres:17-alpine
     container_name: notes-postgres
     restart: unless-stopped
+
     environment:
       POSTGRES_USER: notes_user
       POSTGRES_PASSWORD: notes_password
       POSTGRES_DB: notes_db
+
     ports:
       - "5432:5432"
+
     volumes:
       - notes_postgres_data:/var/lib/postgresql/data
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U notes_user -d notes_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: notes-pgadmin
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+
+    ports:
+      - "5050:80"
+
+    volumes:
+      - notes_pgadmin_data:/var/lib/pgadmin
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
 volumes:
   notes_postgres_data:
-
+  notes_pgadmin_data:
