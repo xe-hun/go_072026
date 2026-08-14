@@ -177,7 +177,6 @@ A block belongs to one note and contains:
 - Text content
 - Sortable position
 - Block-specific properties
-- Current block version
 - Created timestamp
 - Updated timestamp
 - Optional deleted timestamp
@@ -285,7 +284,6 @@ CREATE TABLE note_blocks (
     text_content TEXT NOT NULL DEFAULT '',
     position TEXT NOT NULL,
     properties JSONB NOT NULL DEFAULT '{}',
-    current_version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -336,8 +334,6 @@ CREATE TABLE note_changes (
     operation_type TEXT NOT NULL,
     base_note_version BIGINT NOT NULL,
     resulting_note_version BIGINT NOT NULL,
-    base_block_version BIGINT,
-    resulting_block_version BIGINT,
     change_format TEXT NOT NULL DEFAULT 'structured-operation-v1',
     schema_version INTEGER NOT NULL DEFAULT 1,
     change_data JSONB NOT NULL,
@@ -458,20 +454,16 @@ CREATE INDEX outbox_jobs_available_idx
 
 ## 7. Versioning Rules
 
-Maintain two version levels:
-
-- Note version
-- Block version
+Maintain one note version per note.
 
 Rules:
 
 1. Every note-level or block-level mutation increments `notes.current_version`.
-2. A block mutation also increments `note_blocks.current_version`.
-3. Each accepted operation records its base and resulting versions.
-4. The server is authoritative for resulting versions.
-5. Clients must send the note base version they edited.
-6. A version mismatch must return an explicit conflict unless the operation can be safely merged.
-7. Do not silently overwrite note body or block text with last-write-wins.
+2. Each accepted operation records its base and resulting note versions.
+3. The server is authoritative for resulting versions.
+4. Clients must send the note base version they edited.
+5. A version mismatch must return an explicit conflict unless the operation can be safely merged.
+6. Do not silently overwrite note body or block text with last-write-wins.
 
 Last-write-wins is acceptable for low-risk fields such as:
 
@@ -556,7 +548,6 @@ Accept-Encoding: gzip
   "blockId": "uuid",
   "clientNoteVersion": 17,
   "serverNoteVersion": 20,
-  "serverBlockVersion": 6,
   "noteSnapshot": {
     "id": "uuid",
     "currentVersion": 20,
@@ -1004,13 +995,11 @@ Test service logic for:
 
 - Valid operation application
 - Note version increments
-- Block version increments
 - Version conflicts
 - Duplicate operation retries
 - Unauthorized note access
 - Invalid device ownership
 - Soft deletion
-- Block movement
 - Snapshot threshold calculation
 
 ### 21.2 PostgreSQL Integration Tests
@@ -1051,7 +1040,7 @@ Test:
 The following must pass:
 
 1. Retrying the same operation does not duplicate it.
-2. Two devices editing from the same block version results in one accepted edit and one explicit conflict.
+2. Two devices editing from the same note version results in one accepted edit and one explicit conflict.
 3. A failed transaction leaves the current state and change log unchanged.
 4. Deleted notes and blocks sync to offline devices.
 5. Changes are returned in increasing `global_sequence` order.

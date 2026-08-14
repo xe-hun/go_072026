@@ -29,7 +29,6 @@ func TestEncodeSnapshotProducesStableChecksum(t *testing.T) {
 				Text:       "Buy milk",
 				Position:   "a0",
 				Properties: json.RawMessage(`{"isChecked":false}`),
-				Version:    1,
 			},
 		},
 	}
@@ -61,14 +60,13 @@ func TestBuildSnapshotDocumentIncludesDeletedBlocks(t *testing.T) {
 		},
 		Blocks: []store.NoteBlock{
 			{
-				ID:             uuid.New(),
-				NoteID:         uuid.New(),
-				BlockType:      "text",
-				TextContent:    "removed",
-				Position:       "a0",
-				Properties:     json.RawMessage(`{}`),
-				CurrentVersion: 2,
-				DeletedAt:      pgtype.Timestamptz{Time: deletedAt, Valid: true},
+				ID:          uuid.New(),
+				NoteID:      uuid.New(),
+				BlockType:   "text",
+				TextContent: "removed",
+				Position:    "a0",
+				Properties:  json.RawMessage(`{}`),
+				DeletedAt:   pgtype.Timestamptz{Time: deletedAt, Valid: true},
 			},
 		},
 	}

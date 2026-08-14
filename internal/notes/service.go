@@ -62,16 +62,15 @@ func mapNoteDocument(doc store.NoteDocument) NoteResponse {
 	blocks := make([]BlockResponse, 0, len(doc.Blocks))
 	for _, block := range doc.Blocks {
 		blocks = append(blocks, BlockResponse{
-			ID:             block.ID,
-			NoteID:         block.NoteID,
-			BlockType:      block.BlockType,
-			TextContent:    block.TextContent,
-			Position:       block.Position,
-			Properties:     store.NormalizeJSON(block.Properties),
-			CurrentVersion: block.CurrentVersion,
-			CreatedAt:      block.CreatedAt,
-			UpdatedAt:      block.UpdatedAt,
-			DeletedAt:      store.TimePtr(block.DeletedAt),
+			ID:          block.ID,
+			NoteID:      block.NoteID,
+			BlockType:   block.BlockType,
+			TextContent: block.TextContent,
+			Position:    block.Position,
+			Properties:  store.NormalizeJSON(block.Properties),
+			CreatedAt:   block.CreatedAt,
+			UpdatedAt:   block.UpdatedAt,
+			DeletedAt:   store.TimePtr(block.DeletedAt),
 		})
 	}
 	return NoteResponse{

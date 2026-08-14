@@ -181,8 +181,6 @@ A valid sync request can have both accepted and rejected note batches. These are
 
 Every mutation increments `notes.current_version`.
 
-Every block mutation also increments `note_blocks.current_version`.
-
 The server is authoritative for resulting versions.
 
 Version mismatches return `BASE_VERSION_CONFLICT`; the code does not silently overwrite note or block text.

@@ -79,8 +79,6 @@ type AcceptedOperation struct {
 	BlockID      *uuid.UUID  `json:"blockId,omitempty"`
 	// NoteVersion is the resulting note version.
 	NoteVersion int64 `json:"noteVersion"`
-	// BlockVersion is the resulting block version for block operations.
-	BlockVersion *int64 `json:"blockVersion,omitempty"`
 	// Sequence is the global change sequence assigned by PostgreSQL.
 	Sequence int64 `json:"sequence"`
 }
@@ -96,9 +94,8 @@ type RejectedOperation struct {
 	BlockID      *uuid.UUID        `json:"blockId,omitempty"`
 	NoteSnapshot *RejectedSnapshot `json:"noteSnapshot,omitempty"`
 	// Client/server versions are included for conflict resolution UI.
-	ClientNoteVersion  int64  `json:"clientNoteVersion,omitempty"`
-	ServerNoteVersion  int64  `json:"serverNoteVersion,omitempty"`
-	ServerBlockVersion *int64 `json:"serverBlockVersion,omitempty"`
+	ClientNoteVersion int64 `json:"clientNoteVersion,omitempty"`
+	ServerNoteVersion int64 `json:"serverNoteVersion,omitempty"`
 }
 
 // RejectedSnapshot is the current note state returned once for a rejected note
@@ -118,16 +115,15 @@ type RejectedSnapshot struct {
 
 // RejectedBlock is one block inside a rejected batch's current note snapshot.
 type RejectedBlock struct {
-	ID             uuid.UUID       `json:"id"`
-	NoteID         uuid.UUID       `json:"noteId"`
-	BlockType      string          `json:"blockType"`
-	TextContent    string          `json:"textContent"`
-	Position       string          `json:"position"`
-	Properties     json.RawMessage `json:"properties"`
-	CurrentVersion int64           `json:"currentVersion"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
-	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
+	ID          uuid.UUID       `json:"id"`
+	NoteID      uuid.UUID       `json:"noteId"`
+	BlockType   string          `json:"blockType"`
+	TextContent string          `json:"textContent"`
+	Position    string          `json:"position"`
+	Properties  json.RawMessage `json:"properties"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
 }
 
 // PulledChange is a change-log row sent to another device during pull sync.
@@ -140,13 +136,11 @@ type PulledChange struct {
 	EntityType    string     `json:"entityType"`
 	OperationType string     `json:"operationType"`
 	// Base/resulting versions let clients apply or inspect changes in order.
-	BaseNoteVersion       int64           `json:"baseNoteVersion"`
-	ResultingNoteVersion  int64           `json:"resultingNoteVersion"`
-	BaseBlockVersion      *int64          `json:"baseBlockVersion,omitempty"`
-	ResultingBlockVersion *int64          `json:"resultingBlockVersion,omitempty"`
-	ChangeFormat          string          `json:"changeFormat"`
-	SchemaVersion         int32           `json:"schemaVersion"`
-	ChangeData            json.RawMessage `json:"changeData"`
+	BaseNoteVersion      int64           `json:"baseNoteVersion"`
+	ResultingNoteVersion int64           `json:"resultingNoteVersion"`
+	ChangeFormat         string          `json:"changeFormat"`
+	SchemaVersion        int32           `json:"schemaVersion"`
+	ChangeData           json.RawMessage `json:"changeData"`
 	// Sequence is the global cursor value for pagination.
 	Sequence  int64     `json:"sequence"`
 	CreatedAt time.Time `json:"createdAt"`

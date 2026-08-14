@@ -70,10 +70,8 @@ type NoteBlock struct {
 	Position string
 	// Properties stores type-specific JSONB properties.
 	Properties json.RawMessage
-	// CurrentVersion increments for every block mutation.
-	CurrentVersion int64
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 	// DeletedAt is the block tombstone timestamp when soft deleted.
 	DeletedAt pgtype.Timestamptz
 }
@@ -100,10 +98,6 @@ type NoteChange struct {
 	BaseNoteVersion int64
 	// ResultingNoteVersion is the server-authoritative note version after apply.
 	ResultingNoteVersion int64
-	// BaseBlockVersion is nullable for note-level operations.
-	BaseBlockVersion pgtype.Int8
-	// ResultingBlockVersion is nullable for note-level operations.
-	ResultingBlockVersion pgtype.Int8
 	// ChangeFormat describes how to interpret ChangeData.
 	ChangeFormat string
 	// SchemaVersion describes the version of ChangeData.
@@ -185,13 +179,11 @@ type InsertNoteChangeParams struct {
 	OperationType     string
 	// Base/resulting versions are copied into history for conflict diagnostics
 	// and deterministic replay.
-	BaseNoteVersion       int64
-	ResultingNoteVersion  int64
-	BaseBlockVersion      *int64
-	ResultingBlockVersion *int64
-	ChangeFormat          string
-	SchemaVersion         int32
-	ChangeData            json.RawMessage
+	BaseNoteVersion      int64
+	ResultingNoteVersion int64
+	ChangeFormat         string
+	SchemaVersion        int32
+	ChangeData           json.RawMessage
 }
 
 // NoteDocument groups one note with all of its blocks for read responses and
@@ -242,22 +234,6 @@ func NullableText(value *string) any {
 		return nil
 	}
 	return *value
-}
-
-// NullableInt64 converts an int64 pointer into a nil-or-value SQL argument.
-func NullableInt64(value *int64) any {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
-// Int64Ptr converts nullable PostgreSQL int8 into an optional JSON number.
-func Int64Ptr(value pgtype.Int8) *int64 {
-	if !value.Valid {
-		return nil
-	}
-	return &value.Int64
 }
 
 // NormalizeJSON ensures optional JSONB documents are emitted as {} rather than

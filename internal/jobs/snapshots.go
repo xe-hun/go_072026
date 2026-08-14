@@ -54,8 +54,6 @@ type SnapshotBlock struct {
 	Position string `json:"position"`
 	// Properties stores block-type-specific JSONB data.
 	Properties json.RawMessage `json:"properties"`
-	// Version is the block version represented by this snapshot.
-	Version int64 `json:"version"`
 	// DeletedAt is present for block tombstones.
 	DeletedAt *string `json:"deletedAt"`
 }
@@ -103,7 +101,6 @@ func BuildSnapshotDocument(doc store.NoteDocument) SnapshotDocument {
 			Text:       block.TextContent,
 			Position:   block.Position,
 			Properties: store.NormalizeJSON(block.Properties),
-			Version:    block.CurrentVersion,
 			DeletedAt:  formatTimePtr(store.TimePtr(block.DeletedAt)),
 		})
 	}

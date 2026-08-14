@@ -53,22 +53,21 @@ RETURNING *;
 -- name: CreateBlock :one
 -- Inserts current block state.
 INSERT INTO note_blocks (
-    id, note_id, block_type, text_content, position, properties, current_version
+    id, note_id, block_type, text_content, position, properties
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
 
 -- name: UpdateBlockState :one
--- Writes current block state after service-level version checks.
+-- Writes current block state after service-level validation.
 UPDATE note_blocks
 SET block_type = $3,
     text_content = $4,
     position = $5,
     properties = $6,
-    current_version = $7,
     updated_at = now(),
-    deleted_at = $8
+    deleted_at = $7
 WHERE id = $1
   AND note_id = $2
 RETURNING *;

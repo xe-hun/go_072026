@@ -234,7 +234,6 @@ func (s *Service) acceptedOperationBatch(ctx context.Context, tx *store.Store, o
 	}
 	if len(acceptedItems) == 1 {
 		accepted.BlockID = last.BlockID
-		accepted.BlockVersion = last.BlockVersion
 	}
 	return accepted, nil
 }
@@ -320,7 +319,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 // results in note version 1.
 func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
 	if op.BaseNoteVersion != 0 {
-		rejected := rejectedConflict(op, 0, nil)
+		rejected := rejectedConflict(op, 0)
 		return nil, &rejected, nil
 	}
 
@@ -360,7 +359,7 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 	if err != nil {
 		return nil, nil, err
 	}
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, 0, created.CurrentVersion, nil, nil)
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, 0, created.CurrentVersion)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -386,7 +385,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 	if note.CurrentVersion != op.BaseNoteVersion {
 		// The client edited stale state. Return an explicit conflict rather than
 		// overwriting.
-		rejected := rejectedConflict(op, note.CurrentVersion, nil)
+		rejected := rejectedConflict(op, note.CurrentVersion)
 		return nil, &rejected, nil
 	}
 
@@ -424,7 +423,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 	if err != nil {
 		return nil, nil, err
 	}
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, baseVersion, updated.CurrentVersion, nil, nil)
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, baseVersion, updated.CurrentVersion)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -435,8 +434,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 	return &accepted, nil, nil
 }
 
-// createBlock applies create_block. It increments the parent note version and
-// creates the block at version 1.
+// createBlock applies create_block and increments the parent note version.
 func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
 	// Lock the parent note first because the note version is the global version
 	// for all block mutations within the note.
@@ -449,7 +447,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		return nil, nil, err
 	}
 	if note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, note.CurrentVersion, nil)
+		rejected := rejectedConflict(op, note.CurrentVersion)
 		return nil, &rejected, nil
 	}
 
@@ -492,19 +490,17 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	}
 
 	block, err := tx.CreateBlock(ctx, store.NoteBlock{
-		ID:             *op.BlockID,
-		NoteID:         note.ID,
-		BlockType:      blockType,
-		TextContent:    text,
-		Position:       position,
-		Properties:     properties,
-		CurrentVersion: 1,
+		ID:          *op.BlockID,
+		NoteID:      note.ID,
+		BlockType:   blockType,
+		TextContent: text,
+		Position:    position,
+		Properties:  properties,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	resultBlockVersion := block.CurrentVersion
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, op.BlockID, baseNoteVersion, note.CurrentVersion, nil, &resultBlockVersion)
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, &block.ID, baseNoteVersion, note.CurrentVersion)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -528,7 +524,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		return nil, nil, err
 	}
 	if note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, note.CurrentVersion, nil)
+		rejected := rejectedConflict(op, note.CurrentVersion)
 		return nil, &rejected, nil
 	}
 
@@ -542,10 +538,8 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	}
 
 	baseNoteVersion := note.CurrentVersion
-	baseBlockVersion := block.CurrentVersion
-	// A block mutation increments both version levels.
+	// A block mutation increments the parent note version.
 	note.CurrentVersion++
-	block.CurrentVersion++
 
 	switch op.OperationType {
 	case OperationUpdateBlock:
@@ -561,10 +555,6 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 			block.BlockType = blockType
 			changed = true
 		}
-		if _, ok := fields["textContent"]; ok {
-			rejected := rejectedInvalid(op, "textContent is no longer supported for update_block; use textDelta, textOperationType, and index.")
-			return nil, &rejected, nil
-		}
 		if properties, ok, err := getObjectField(fields, "properties"); err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
@@ -577,13 +567,6 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
-		}
-		if !hasTextDelta {
-			textDelta, hasTextDelta, err = getStringField(fields, "textdelta")
-			if err != nil {
-				rejected := rejectedInvalid(op, err.Error())
-				return nil, &rejected, nil
-			}
 		}
 		textOperationType, hasTextOperationType, err := getStringField(fields, "textOperationType")
 		if err != nil {
@@ -620,12 +603,10 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	if _, err := tx.UpdateNoteState(ctx, note); err != nil {
 		return nil, nil, err
 	}
-	updatedBlock, err := tx.UpdateBlockState(ctx, block)
-	if err != nil {
+	if _, err := tx.UpdateBlockState(ctx, block); err != nil {
 		return nil, nil, err
 	}
-	resultBlockVersion := updatedBlock.CurrentVersion
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, op.BlockID, baseNoteVersion, note.CurrentVersion, &baseBlockVersion, &resultBlockVersion)
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, op.BlockID, baseNoteVersion, note.CurrentVersion)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -668,23 +649,21 @@ func applyTextDelta(current, delta, operationType string, index int) (string, er
 }
 
 // insertChange writes the append-only history row for an accepted operation.
-func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64, baseBlockVersion, resultingBlockVersion *int64) (store.NoteChange, error) {
+func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
 	return tx.InsertNoteChange(ctx, store.InsertNoteChangeParams{
-		ID:                    uuid.New(),
-		OwnerID:               ownerID,
-		NoteID:                op.NoteID,
-		BlockID:               blockID,
-		DeviceID:              deviceID,
-		ClientOperationID:     op.OperationID,
-		EntityType:            op.EntityType,
-		OperationType:         op.OperationType,
-		BaseNoteVersion:       baseNoteVersion,
-		ResultingNoteVersion:  resultingNoteVersion,
-		BaseBlockVersion:      baseBlockVersion,
-		ResultingBlockVersion: resultingBlockVersion,
-		ChangeFormat:          normalizeChangeFormat(op.ChangeFormat),
-		SchemaVersion:         1,
-		ChangeData:            op.ChangeData,
+		ID:                   uuid.New(),
+		OwnerID:              ownerID,
+		NoteID:               op.NoteID,
+		BlockID:              blockID,
+		DeviceID:             deviceID,
+		ClientOperationID:    op.OperationID,
+		EntityType:           op.EntityType,
+		OperationType:        op.OperationType,
+		BaseNoteVersion:      baseNoteVersion,
+		ResultingNoteVersion: resultingNoteVersion,
+		ChangeFormat:         normalizeChangeFormat(op.ChangeFormat),
+		SchemaVersion:        1,
+		ChangeData:           op.ChangeData,
 	})
 }
 
@@ -714,34 +693,31 @@ func (s *Service) enqueueSnapshotIfNeeded(ctx context.Context, tx *store.Store, 
 // used for both first-time accepts and idempotent retries.
 func acceptedFromChange(change store.NoteChange) AcceptedOperation {
 	return AcceptedOperation{
-		OperationID:  change.ClientOperationID,
-		NoteID:       change.NoteID,
-		BlockID:      store.UUIDPtr(change.BlockID),
-		NoteVersion:  change.ResultingNoteVersion,
-		BlockVersion: store.Int64Ptr(change.ResultingBlockVersion),
-		Sequence:     change.GlobalSequence,
+		OperationID: change.ClientOperationID,
+		NoteID:      change.NoteID,
+		BlockID:     store.UUIDPtr(change.BlockID),
+		NoteVersion: change.ResultingNoteVersion,
+		Sequence:    change.GlobalSequence,
 	}
 }
 
 // mapPulledChange maps a change-log row into the pull response shape.
 func mapPulledChange(change store.NoteChange) PulledChange {
 	return PulledChange{
-		ID:                    change.ID,
-		OperationID:           change.ClientOperationID,
-		NoteID:                change.NoteID,
-		BlockID:               store.UUIDPtr(change.BlockID),
-		DeviceID:              change.DeviceID,
-		EntityType:            change.EntityType,
-		OperationType:         change.OperationType,
-		BaseNoteVersion:       change.BaseNoteVersion,
-		ResultingNoteVersion:  change.ResultingNoteVersion,
-		BaseBlockVersion:      store.Int64Ptr(change.BaseBlockVersion),
-		ResultingBlockVersion: store.Int64Ptr(change.ResultingBlockVersion),
-		ChangeFormat:          change.ChangeFormat,
-		SchemaVersion:         change.SchemaVersion,
-		ChangeData:            store.NormalizeJSON(change.ChangeData),
-		Sequence:              change.GlobalSequence,
-		CreatedAt:             change.CreatedAt,
+		ID:                   change.ID,
+		OperationID:          change.ClientOperationID,
+		NoteID:               change.NoteID,
+		BlockID:              store.UUIDPtr(change.BlockID),
+		DeviceID:             change.DeviceID,
+		EntityType:           change.EntityType,
+		OperationType:        change.OperationType,
+		BaseNoteVersion:      change.BaseNoteVersion,
+		ResultingNoteVersion: change.ResultingNoteVersion,
+		ChangeFormat:         change.ChangeFormat,
+		SchemaVersion:        change.SchemaVersion,
+		ChangeData:           store.NormalizeJSON(change.ChangeData),
+		Sequence:             change.GlobalSequence,
+		CreatedAt:            change.CreatedAt,
 	}
 }
 
@@ -750,16 +726,15 @@ func mapRejectedSnapshot(doc store.NoteDocument) RejectedSnapshot {
 	blocks := make([]RejectedBlock, 0, len(doc.Blocks))
 	for _, block := range doc.Blocks {
 		blocks = append(blocks, RejectedBlock{
-			ID:             block.ID,
-			NoteID:         block.NoteID,
-			BlockType:      block.BlockType,
-			TextContent:    block.TextContent,
-			Position:       block.Position,
-			Properties:     store.NormalizeJSON(block.Properties),
-			CurrentVersion: block.CurrentVersion,
-			CreatedAt:      block.CreatedAt,
-			UpdatedAt:      block.UpdatedAt,
-			DeletedAt:      store.TimePtr(block.DeletedAt),
+			ID:          block.ID,
+			NoteID:      block.NoteID,
+			BlockType:   block.BlockType,
+			TextContent: block.TextContent,
+			Position:    block.Position,
+			Properties:  store.NormalizeJSON(block.Properties),
+			CreatedAt:   block.CreatedAt,
+			UpdatedAt:   block.UpdatedAt,
+			DeletedAt:   store.TimePtr(block.DeletedAt),
 		})
 	}
 	return RejectedSnapshot{

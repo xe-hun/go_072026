@@ -18,13 +18,11 @@ INSERT INTO note_changes (
     operation_type,
     base_note_version,
     resulting_note_version,
-    base_block_version,
-    resulting_block_version,
     change_format,
     schema_version,
     change_data
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING *;
 

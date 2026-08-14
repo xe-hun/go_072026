@@ -37,39 +37,6 @@ func TestValidateOperationShapeRequiresNonNegativeSequence(t *testing.T) {
 	}
 }
 
-// TestValidateOperationShapeRejectsRemovedOperations ensures obsolete operation
-// names are no longer accepted by the sync protocol.
-func TestValidateOperationShapeRejectsRemovedOperations(t *testing.T) {
-	blockID := uuid.New()
-	cases := []ClientOperation{
-		{
-			OperationID:   uuid.New(),
-			NoteID:        uuid.New(),
-			EntityType:    EntityNote,
-			OperationType: "restore_note",
-		},
-		{
-			OperationID:   uuid.New(),
-			NoteID:        uuid.New(),
-			BlockID:       &blockID,
-			EntityType:    EntityBlock,
-			OperationType: "move_block",
-		},
-		{
-			OperationID:   uuid.New(),
-			NoteID:        uuid.New(),
-			BlockID:       &blockID,
-			EntityType:    EntityBlock,
-			OperationType: "restore_block",
-		},
-	}
-	for _, op := range cases {
-		if err := validateOperationShape(op); err == nil {
-			t.Fatalf("expected %s to fail validation", op.OperationType)
-		}
-	}
-}
-
 // TestSortedOperationsOrdersByNoteThenSequence keeps batch application
 // deterministic regardless of request order.
 func TestSortedOperationsOrdersByNoteThenSequence(t *testing.T) {

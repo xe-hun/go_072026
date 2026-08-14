@@ -30,36 +30,33 @@ type Note struct {
 }
 
 type NoteBlock struct {
-	ID             pgtype.UUID        `json:"id"`
-	NoteID         pgtype.UUID        `json:"note_id"`
-	BlockType      string             `json:"block_type"`
-	TextContent    string             `json:"text_content"`
-	Position       string             `json:"position"`
-	Properties     []byte             `json:"properties"`
-	CurrentVersion int64              `json:"current_version"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID          pgtype.UUID        `json:"id"`
+	NoteID      pgtype.UUID        `json:"note_id"`
+	BlockType   string             `json:"block_type"`
+	TextContent string             `json:"text_content"`
+	Position    string             `json:"position"`
+	Properties  []byte             `json:"properties"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type NoteChange struct {
-	ID                    pgtype.UUID        `json:"id"`
-	OwnerID               pgtype.UUID        `json:"owner_id"`
-	NoteID                pgtype.UUID        `json:"note_id"`
-	BlockID               pgtype.UUID        `json:"block_id"`
-	DeviceID              pgtype.UUID        `json:"device_id"`
-	ClientOperationID     pgtype.UUID        `json:"client_operation_id"`
-	EntityType            string             `json:"entity_type"`
-	OperationType         string             `json:"operation_type"`
-	BaseNoteVersion       int64              `json:"base_note_version"`
-	ResultingNoteVersion  int64              `json:"resulting_note_version"`
-	BaseBlockVersion      pgtype.Int8        `json:"base_block_version"`
-	ResultingBlockVersion pgtype.Int8        `json:"resulting_block_version"`
-	ChangeFormat          string             `json:"change_format"`
-	SchemaVersion         int32              `json:"schema_version"`
-	ChangeData            []byte             `json:"change_data"`
-	GlobalSequence        pgtype.Int8        `json:"global_sequence"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	OwnerID              pgtype.UUID        `json:"owner_id"`
+	NoteID               pgtype.UUID        `json:"note_id"`
+	BlockID              pgtype.UUID        `json:"block_id"`
+	DeviceID             pgtype.UUID        `json:"device_id"`
+	ClientOperationID    pgtype.UUID        `json:"client_operation_id"`
+	EntityType           string             `json:"entity_type"`
+	OperationType        string             `json:"operation_type"`
+	BaseNoteVersion      int64              `json:"base_note_version"`
+	ResultingNoteVersion int64              `json:"resulting_note_version"`
+	ChangeFormat         string             `json:"change_format"`
+	SchemaVersion        int32              `json:"schema_version"`
+	ChangeData           []byte             `json:"change_data"`
+	GlobalSequence       pgtype.Int8        `json:"global_sequence"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type NoteSnapshot struct {

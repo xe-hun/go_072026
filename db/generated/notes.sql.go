@@ -13,21 +13,20 @@ import (
 
 const createBlock = `-- name: CreateBlock :one
 INSERT INTO note_blocks (
-    id, note_id, block_type, text_content, position, properties, current_version
+    id, note_id, block_type, text_content, position, properties
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6
 )
-RETURNING id, note_id, block_type, text_content, position, properties, current_version, created_at, updated_at, deleted_at
+RETURNING id, note_id, block_type, text_content, position, properties, created_at, updated_at, deleted_at
 `
 
 type CreateBlockParams struct {
-	ID             pgtype.UUID `json:"id"`
-	NoteID         pgtype.UUID `json:"note_id"`
-	BlockType      string      `json:"block_type"`
-	TextContent    string      `json:"text_content"`
-	Position       string      `json:"position"`
-	Properties     []byte      `json:"properties"`
-	CurrentVersion int64       `json:"current_version"`
+	ID          pgtype.UUID `json:"id"`
+	NoteID      pgtype.UUID `json:"note_id"`
+	BlockType   string      `json:"block_type"`
+	TextContent string      `json:"text_content"`
+	Position    string      `json:"position"`
+	Properties  []byte      `json:"properties"`
 }
 
 // Inserts current block state.
@@ -39,7 +38,6 @@ func (q *Queries) CreateBlock(ctx context.Context, arg CreateBlockParams) (NoteB
 		arg.TextContent,
 		arg.Position,
 		arg.Properties,
-		arg.CurrentVersion,
 	)
 	var i NoteBlock
 	err := row.Scan(
@@ -49,7 +47,6 @@ func (q *Queries) CreateBlock(ctx context.Context, arg CreateBlockParams) (NoteB
 		&i.TextContent,
 		&i.Position,
 		&i.Properties,
-		&i.CurrentVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -101,7 +98,7 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, e
 }
 
 const getBlockForNoteForUpdate = `-- name: GetBlockForNoteForUpdate :one
-SELECT id, note_id, block_type, text_content, position, properties, current_version, created_at, updated_at, deleted_at
+SELECT id, note_id, block_type, text_content, position, properties, created_at, updated_at, deleted_at
 FROM note_blocks
 WHERE id = $1
   AND note_id = $2
@@ -124,7 +121,6 @@ func (q *Queries) GetBlockForNoteForUpdate(ctx context.Context, arg GetBlockForN
 		&i.TextContent,
 		&i.Position,
 		&i.Properties,
-		&i.CurrentVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -194,7 +190,7 @@ func (q *Queries) GetNoteForOwnerForUpdate(ctx context.Context, arg GetNoteForOw
 }
 
 const listBlocksForNote = `-- name: ListBlocksForNote :many
-SELECT id, note_id, block_type, text_content, position, properties, current_version, created_at, updated_at, deleted_at
+SELECT id, note_id, block_type, text_content, position, properties, created_at, updated_at, deleted_at
 FROM note_blocks
 WHERE note_id = $1
 ORDER BY position ASC, created_at ASC
@@ -217,7 +213,6 @@ func (q *Queries) ListBlocksForNote(ctx context.Context, noteID pgtype.UUID) ([]
 			&i.TextContent,
 			&i.Position,
 			&i.Properties,
-			&i.CurrentVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -238,26 +233,24 @@ SET block_type = $3,
     text_content = $4,
     position = $5,
     properties = $6,
-    current_version = $7,
     updated_at = now(),
-    deleted_at = $8
+    deleted_at = $7
 WHERE id = $1
   AND note_id = $2
-RETURNING id, note_id, block_type, text_content, position, properties, current_version, created_at, updated_at, deleted_at
+RETURNING id, note_id, block_type, text_content, position, properties, created_at, updated_at, deleted_at
 `
 
 type UpdateBlockStateParams struct {
-	ID             pgtype.UUID        `json:"id"`
-	NoteID         pgtype.UUID        `json:"note_id"`
-	BlockType      string             `json:"block_type"`
-	TextContent    string             `json:"text_content"`
-	Position       string             `json:"position"`
-	Properties     []byte             `json:"properties"`
-	CurrentVersion int64              `json:"current_version"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID          pgtype.UUID        `json:"id"`
+	NoteID      pgtype.UUID        `json:"note_id"`
+	BlockType   string             `json:"block_type"`
+	TextContent string             `json:"text_content"`
+	Position    string             `json:"position"`
+	Properties  []byte             `json:"properties"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
-// Writes current block state after service-level version checks.
+// Writes current block state after service-level validation.
 func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStateParams) (NoteBlock, error) {
 	row := q.db.QueryRow(ctx, updateBlockState,
 		arg.ID,
@@ -266,7 +259,6 @@ func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStatePara
 		arg.TextContent,
 		arg.Position,
 		arg.Properties,
-		arg.CurrentVersion,
 		arg.DeletedAt,
 	)
 	var i NoteBlock
@@ -277,7 +269,6 @@ func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStatePara
 		&i.TextContent,
 		&i.Position,
 		&i.Properties,
-		&i.CurrentVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

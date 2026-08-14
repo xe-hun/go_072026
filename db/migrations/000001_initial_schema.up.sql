@@ -10,7 +10,7 @@ CREATE TABLE categories (
 );
 
 -- notes stores current note-level state. Blocks are stored separately so they
--- can be ordered, versioned, and synced independently.
+-- can be ordered and synced independently.
 CREATE TABLE notes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -39,7 +39,6 @@ CREATE TABLE note_blocks (
     text_content TEXT NOT NULL DEFAULT '',
     position TEXT NOT NULL,
     properties JSONB NOT NULL DEFAULT '{}',
-    current_version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -79,8 +78,6 @@ CREATE TABLE note_changes (
     operation_type TEXT NOT NULL,
     base_note_version BIGINT NOT NULL,
     resulting_note_version BIGINT NOT NULL,
-    base_block_version BIGINT,
-    resulting_block_version BIGINT,
     change_format TEXT NOT NULL DEFAULT 'structured-operation-v1',
     schema_version INTEGER NOT NULL DEFAULT 1,
     change_data JSONB NOT NULL,

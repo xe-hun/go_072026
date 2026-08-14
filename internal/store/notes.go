@@ -84,29 +84,27 @@ func (s *Store) UpdateNoteState(ctx context.Context, note Note) (Note, error) {
 // CreateBlock inserts current block state.
 func (s *Store) CreateBlock(ctx context.Context, block NoteBlock) (NoteBlock, error) {
 	created, err := s.q.CreateBlock(ctx, db.CreateBlockParams{
-		ID:             pgUUID(block.ID),
-		NoteID:         pgUUID(block.NoteID),
-		BlockType:      block.BlockType,
-		TextContent:    block.TextContent,
-		Position:       block.Position,
-		Properties:     []byte(NormalizeJSON(block.Properties)),
-		CurrentVersion: block.CurrentVersion,
+		ID:          pgUUID(block.ID),
+		NoteID:      pgUUID(block.NoteID),
+		BlockType:   block.BlockType,
+		TextContent: block.TextContent,
+		Position:    block.Position,
+		Properties:  []byte(NormalizeJSON(block.Properties)),
 	})
 	return fromDBBlock(created), err
 }
 
 // UpdateBlockState writes block current state after the service has validated
-// note/block versions and incremented block CurrentVersion.
+// the parent note version.
 func (s *Store) UpdateBlockState(ctx context.Context, block NoteBlock) (NoteBlock, error) {
 	updated, err := s.q.UpdateBlockState(ctx, db.UpdateBlockStateParams{
-		ID:             pgUUID(block.ID),
-		NoteID:         pgUUID(block.NoteID),
-		BlockType:      block.BlockType,
-		TextContent:    block.TextContent,
-		Position:       block.Position,
-		Properties:     []byte(NormalizeJSON(block.Properties)),
-		CurrentVersion: block.CurrentVersion,
-		DeletedAt:      block.DeletedAt,
+		ID:          pgUUID(block.ID),
+		NoteID:      pgUUID(block.NoteID),
+		BlockType:   block.BlockType,
+		TextContent: block.TextContent,
+		Position:    block.Position,
+		Properties:  []byte(NormalizeJSON(block.Properties)),
+		DeletedAt:   block.DeletedAt,
 	})
 	return fromDBBlock(updated), mapNoRows(err)
 }

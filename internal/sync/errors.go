@@ -24,16 +24,15 @@ func rejectedNotFound(op ClientOperation, message string) RejectedOperation {
 	}
 }
 
-// rejectedConflict reports base-version mismatches so clients can resolve the
-// conflict explicitly.
-func rejectedConflict(op ClientOperation, serverNoteVersion int64, serverBlockVersion *int64) RejectedOperation {
+// rejectedConflict reports note base-version mismatches so clients can resolve
+// the conflict explicitly.
+func rejectedConflict(op ClientOperation, serverNoteVersion int64) RejectedOperation {
 	return RejectedOperation{
-		OperationID:        op.OperationID,
-		Code:               httpapi.CodeBaseVersionConflict,
-		NoteID:             op.NoteID,
-		BlockID:            op.BlockID,
-		ClientNoteVersion:  op.BaseNoteVersion,
-		ServerNoteVersion:  serverNoteVersion,
-		ServerBlockVersion: serverBlockVersion,
+		OperationID:       op.OperationID,
+		Code:              httpapi.CodeBaseVersionConflict,
+		NoteID:            op.NoteID,
+		BlockID:           op.BlockID,
+		ClientNoteVersion: op.BaseNoteVersion,
+		ServerNoteVersion: serverNoteVersion,
 	}
 }

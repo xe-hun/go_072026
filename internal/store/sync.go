@@ -27,21 +27,19 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 		blockID = pgUUID(*arg.BlockID)
 	}
 	change, err := s.q.InsertNoteChange(ctx, db.InsertNoteChangeParams{
-		ID:                    pgUUID(arg.ID),
-		OwnerID:               pgUUID(arg.OwnerID),
-		NoteID:                pgUUID(arg.NoteID),
-		BlockID:               blockID,
-		DeviceID:              pgUUID(arg.DeviceID),
-		ClientOperationID:     pgUUID(arg.ClientOperationID),
-		EntityType:            arg.EntityType,
-		OperationType:         arg.OperationType,
-		BaseNoteVersion:       arg.BaseNoteVersion,
-		ResultingNoteVersion:  arg.ResultingNoteVersion,
-		BaseBlockVersion:      pgInt8(arg.BaseBlockVersion),
-		ResultingBlockVersion: pgInt8(arg.ResultingBlockVersion),
-		ChangeFormat:          arg.ChangeFormat,
-		SchemaVersion:         arg.SchemaVersion,
-		ChangeData:            []byte(NormalizeJSON(arg.ChangeData)),
+		ID:                   pgUUID(arg.ID),
+		OwnerID:              pgUUID(arg.OwnerID),
+		NoteID:               pgUUID(arg.NoteID),
+		BlockID:              blockID,
+		DeviceID:             pgUUID(arg.DeviceID),
+		ClientOperationID:    pgUUID(arg.ClientOperationID),
+		EntityType:           arg.EntityType,
+		OperationType:        arg.OperationType,
+		BaseNoteVersion:      arg.BaseNoteVersion,
+		ResultingNoteVersion: arg.ResultingNoteVersion,
+		ChangeFormat:         arg.ChangeFormat,
+		SchemaVersion:        arg.SchemaVersion,
+		ChangeData:           []byte(NormalizeJSON(arg.ChangeData)),
 	})
 	return fromDBChange(change), err
 }

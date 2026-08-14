@@ -44,10 +44,8 @@ type BlockResponse struct {
 	Position string `json:"position"`
 	// Properties contains type-specific JSONB fields.
 	Properties json.RawMessage `json:"properties"`
-	// CurrentVersion is the server-authoritative block version.
-	CurrentVersion int64     `json:"currentVersion"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	CreatedAt  time.Time       `json:"createdAt"`
+	UpdatedAt  time.Time       `json:"updatedAt"`
 	// DeletedAt is present for tombstoned blocks.
 	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 }
