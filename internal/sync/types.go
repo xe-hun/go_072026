@@ -40,10 +40,10 @@ type ClientOperation struct {
 	EntityType string `json:"entityType"`
 	// OperationType is the concrete operation name.
 	OperationType string `json:"operationType"`
+	// Sequence orders client operations within a note batch.
+	Sequence int `json:"sequence"`
 	// BaseNoteVersion is the version the client edited from.
 	BaseNoteVersion int64 `json:"baseNoteVersion"`
-	// BaseBlockVersion is required for existing block mutations.
-	BaseBlockVersion *int64 `json:"baseBlockVersion,omitempty"`
 	// ChangeFormat currently supports structured-operation-v1.
 	ChangeFormat string `json:"changeFormat,omitempty"`
 	// ChangeData contains changed fields for the operation.
@@ -70,12 +70,13 @@ type Response struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// AcceptedOperation reports authoritative versions/sequences for an accepted or
-// replayed operation.
+// AcceptedOperation reports authoritative versions/sequences for an accepted
+// note batch.
 type AcceptedOperation struct {
-	OperationID uuid.UUID  `json:"operationId"`
-	NoteID      uuid.UUID  `json:"noteId"`
-	BlockID     *uuid.UUID `json:"blockId,omitempty"`
+	OperationID  uuid.UUID   `json:"operationId"`
+	OperationIDs []uuid.UUID `json:"operationIds,omitempty"`
+	NoteID       uuid.UUID   `json:"noteId"`
+	BlockID      *uuid.UUID  `json:"blockId,omitempty"`
 	// NoteVersion is the resulting note version.
 	NoteVersion int64 `json:"noteVersion"`
 	// BlockVersion is the resulting block version for block operations.
@@ -84,19 +85,49 @@ type AcceptedOperation struct {
 	Sequence int64 `json:"sequence"`
 }
 
-// RejectedOperation reports why one operation in an otherwise valid batch could
-// not be applied.
+// RejectedOperation reports why one note batch in an otherwise valid sync
+// request could not be applied.
 type RejectedOperation struct {
-	OperationID uuid.UUID  `json:"operationId"`
-	Code        string     `json:"code"`
-	Message     string     `json:"message,omitempty"`
-	NoteID      uuid.UUID  `json:"noteId,omitempty"`
-	BlockID     *uuid.UUID `json:"blockId,omitempty"`
+	OperationID  uuid.UUID         `json:"operationId"`
+	OperationIDs []uuid.UUID       `json:"operationIds,omitempty"`
+	Code         string            `json:"code"`
+	Message      string            `json:"message,omitempty"`
+	NoteID       uuid.UUID         `json:"noteId,omitempty"`
+	BlockID      *uuid.UUID        `json:"blockId,omitempty"`
+	NoteSnapshot *RejectedSnapshot `json:"noteSnapshot,omitempty"`
 	// Client/server versions are included for conflict resolution UI.
 	ClientNoteVersion  int64  `json:"clientNoteVersion,omitempty"`
 	ServerNoteVersion  int64  `json:"serverNoteVersion,omitempty"`
-	ClientBlockVersion *int64 `json:"clientBlockVersion,omitempty"`
 	ServerBlockVersion *int64 `json:"serverBlockVersion,omitempty"`
+}
+
+// RejectedSnapshot is the current note state returned once for a rejected note
+// batch so clients can reset conflict UI to the server-authoritative document.
+type RejectedSnapshot struct {
+	ID             uuid.UUID       `json:"id"`
+	OwnerID        uuid.UUID       `json:"ownerId"`
+	CategoryID     *uuid.UUID      `json:"categoryId,omitempty"`
+	Title          string          `json:"title"`
+	Metadata       json.RawMessage `json:"metadata"`
+	CurrentVersion int64           `json:"currentVersion"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
+	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
+	Blocks         []RejectedBlock `json:"blocks"`
+}
+
+// RejectedBlock is one block inside a rejected batch's current note snapshot.
+type RejectedBlock struct {
+	ID             uuid.UUID       `json:"id"`
+	NoteID         uuid.UUID       `json:"noteId"`
+	BlockType      string          `json:"blockType"`
+	TextContent    string          `json:"textContent"`
+	Position       string          `json:"position"`
+	Properties     json.RawMessage `json:"properties"`
+	CurrentVersion int64           `json:"currentVersion"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
+	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
 }
 
 // PulledChange is a change-log row sent to another device during pull sync.

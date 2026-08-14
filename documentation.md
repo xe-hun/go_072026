@@ -160,20 +160,22 @@ The service:
 1. Validates request-level fields and limits.
 2. Starts a PostgreSQL transaction.
 3. Locks the device row and verifies ownership/revocation.
-4. Processes each operation independently.
-5. Looks up `(device_id, operation_id)` to make retries idempotent.
-6. Validates entity type, operation type, block ID requirements, change format, and change schema.
-7. Locks affected note and block rows with `FOR UPDATE`.
-8. Compares client base versions to server versions.
-9. Applies valid operations to current state.
-10. Inserts exactly one `note_changes` row per accepted operation.
-11. Enqueues snapshot jobs when thresholds are reached.
-12. Pulls remote changes after the client cursor.
-13. Updates the device cursor and last seen timestamp.
-14. Commits the transaction.
-15. Returns accepted operations, rejected operation items, pulled changes, next cursor, and pagination state.
+4. Sorts operations by `noteId` and then client `sequence`.
+5. Applies each note's operations as one savepoint-backed batch.
+6. Looks up `(device_id, operation_id)` to make retries idempotent.
+7. Validates entity type, operation type, block ID requirements, change format, and change schema.
+8. Locks affected note and block rows with `FOR UPDATE`.
+9. Compares client note base versions to server versions.
+10. Applies valid operations to current state.
+11. Inserts exactly one `note_changes` row per accepted operation.
+12. Rolls back the whole note batch if any operation fails and returns one rejected item with the current note snapshot.
+13. Enqueues snapshot jobs when thresholds are reached.
+14. Pulls remote changes after the client cursor.
+15. Updates the device cursor and last seen timestamp.
+16. Commits the transaction.
+17. Returns accepted note batches, rejected note batches, pulled changes, next cursor, and pagination state.
 
-A valid batch can have both accepted and rejected operations. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
+A valid sync request can have both accepted and rejected note batches. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
 
 ## Versioning
 

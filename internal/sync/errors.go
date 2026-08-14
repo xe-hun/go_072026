@@ -34,7 +34,6 @@ func rejectedConflict(op ClientOperation, serverNoteVersion int64, serverBlockVe
 		BlockID:            op.BlockID,
 		ClientNoteVersion:  op.BaseNoteVersion,
 		ServerNoteVersion:  serverNoteVersion,
-		ClientBlockVersion: op.BaseBlockVersion,
 		ServerBlockVersion: serverBlockVersion,
 	}
 }

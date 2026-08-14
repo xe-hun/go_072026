@@ -231,6 +231,7 @@ Generate UUIDs for the operation and note. Then send:
       "noteId": "<NOTE_ID>",
       "entityType": "note",
       "operationType": "create_note",
+      "sequence": 1,
       "baseNoteVersion": 0,
       "changeFormat": "structured-operation-v1",
       "changeData": {
@@ -267,6 +268,7 @@ Use the note version returned from the note creation response:
       "blockId": "<BLOCK_ID>",
       "entityType": "block",
       "operationType": "create_block",
+      "sequence": 1,
       "baseNoteVersion": 1,
       "changeFormat": "structured-operation-v1",
       "changeData": {

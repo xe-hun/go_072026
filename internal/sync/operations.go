@@ -18,17 +18,18 @@ const (
 	EntityBlock = "block"
 
 	// Note operation names.
-	OperationCreateNote  = "create_note"
-	OperationUpdateNote  = "update_note"
-	OperationDeleteNote  = "delete_note"
-	OperationRestoreNote = "restore_note"
+	OperationCreateNote = "create_note"
+	OperationUpdateNote = "update_note"
+	OperationDeleteNote = "delete_note"
 
 	// Block operation names.
-	OperationCreateBlock  = "create_block"
-	OperationUpdateBlock  = "update_block"
-	OperationMoveBlock    = "move_block"
-	OperationDeleteBlock  = "delete_block"
-	OperationRestoreBlock = "restore_block"
+	OperationCreateBlock = "create_block"
+	OperationUpdateBlock = "update_block"
+	OperationDeleteBlock = "delete_block"
+
+	// Text operation names accepted by update_block.
+	TextOperationInsert = "insert"
+	TextOperationDelete = "delete"
 
 	// ChangeFormatStructuredV1 stores changed fields rather than raw character
 	// diffs.
@@ -94,6 +95,20 @@ func getStringField(fields map[string]json.RawMessage, key string) (string, bool
 	return value, true, nil
 }
 
+// getIntField reads an optional integer field. The bool reports whether the
+// field was present.
+func getIntField(fields map[string]json.RawMessage, key string) (int, bool, error) {
+	raw, ok := fields[key]
+	if !ok {
+		return 0, false, nil
+	}
+	var value int
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, true, fmt.Errorf("%s must be an integer", key)
+	}
+	return value, true, nil
+}
+
 // getObjectField reads an optional JSON object field and returns the raw object
 // so it can be stored in JSONB without reformatting.
 func getObjectField(fields map[string]json.RawMessage, key string) (json.RawMessage, bool, error) {
@@ -137,12 +152,15 @@ func validateOperationShape(op ClientOperation) error {
 	if op.NoteID == uuid.Nil {
 		return errors.New("noteId is required")
 	}
+	if op.Sequence < 0 {
+		return errors.New("sequence must be greater than or equal to zero")
+	}
 	switch op.OperationType {
-	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote, OperationRestoreNote:
+	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote:
 		if op.EntityType != EntityNote {
 			return errors.New("note operation must use entityType note")
 		}
-	case OperationCreateBlock, OperationUpdateBlock, OperationMoveBlock, OperationDeleteBlock, OperationRestoreBlock:
+	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock:
 		if op.EntityType != EntityBlock {
 			return errors.New("block operation must use entityType block")
 		}

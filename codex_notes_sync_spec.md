@@ -364,12 +364,9 @@ Initial operation types:
 - create_note
 - update_note
 - delete_note
-- restore_note
 - create_block
 - update_block
-- move_block
 - delete_block
-- restore_block
 
 Example change payload:
 
@@ -377,7 +374,9 @@ Example change payload:
 {
   "schemaVersion": 1,
   "fields": {
-    "textContent": "Buy milk and bread",
+    "textDelta": " and bread",
+    "textOperationType": "insert",
+    "index": 8,
     "properties": {
       "isChecked": false,
       "isBold": true
@@ -470,7 +469,7 @@ Rules:
 2. A block mutation also increments `note_blocks.current_version`.
 3. Each accepted operation records its base and resulting versions.
 4. The server is authoritative for resulting versions.
-5. Clients must send the base version they edited.
+5. Clients must send the note base version they edited.
 6. A version mismatch must return an explicit conflict unless the operation can be safely merged.
 7. Do not silently overwrite note body or block text with last-write-wins.
 
@@ -511,13 +510,14 @@ Accept-Encoding: gzip
       "blockId": "uuid",
       "entityType": "block",
       "operationType": "update_block",
+      "sequence": 3,
       "baseNoteVersion": 17,
-      "baseBlockVersion": 4,
       "changeFormat": "structured-operation-v1",
       "changeData": {
         "fields": {
-          "insertIndex": 13,
-          "insertedText": "Updated text"
+          "textDelta": "Updated text",
+          "textOperationType": "insert",
+          "index": 13
         }
       }
     }
@@ -532,10 +532,9 @@ Accept-Encoding: gzip
   "accepted": [
     {
       "operationId": "uuid",
+      "operationIds": ["uuid"],
       "noteId": "uuid",
-      "blockId": "uuid",
       "noteVersion": 18,
-      "blockVersion": 5,
       "sequence": 8153
     }
   ],
@@ -557,12 +556,16 @@ Accept-Encoding: gzip
   "blockId": "uuid",
   "clientNoteVersion": 17,
   "serverNoteVersion": 20,
-  "clientBlockVersion": 4,
-  "serverBlockVersion": 6
+  "serverBlockVersion": 6,
+  "noteSnapshot": {
+    "id": "uuid",
+    "currentVersion": 20,
+    "blocks": []
+  }
 }
 ```
 
-Use HTTP `200 OK` for a valid batch that may contain accepted and rejected individual operations.
+Use HTTP `200 OK` for a valid sync request that may contain accepted and rejected note batches.
 
 Use HTTP `409 Conflict` only when the whole request cannot be processed due to a request-level conflict.
 
@@ -576,18 +579,21 @@ For each sync request:
 4. Validate that the device belongs to the user and is not revoked.
 5. Validate operation count and payload size.
 6. Begin a PostgreSQL transaction.
-7. Deduplicate each operation using `(device_id, client_operation_id)`.
-8. Lock affected note rows using `SELECT ... FOR UPDATE`.
-9. Verify ownership through `owner_id`.
-10. Compare base versions.
-11. Apply accepted changes to `notes` and `note_blocks`.
-12. Increment versions.
-13. Insert `note_changes` records.
-14. Insert an outbox job if snapshot criteria are met.
-15. Pull remote changes after the supplied user cursor.
-16. Update device cursor and `last_seen_at`.
-17. Commit.
-18. Return accepted operations, rejected operations, pulled changes, and the next cursor.
+7. Sort operations by `noteId`, then by the client `sequence` integer.
+8. Apply each note's operations as one savepoint-backed batch.
+9. Deduplicate each operation using `(device_id, client_operation_id)`.
+10. Lock affected note rows using `SELECT ... FOR UPDATE`.
+11. Verify ownership through `owner_id`.
+12. Compare note base versions.
+13. Apply accepted changes to `notes` and `note_blocks`.
+14. Increment versions.
+15. Insert `note_changes` records.
+16. If one operation fails, roll back that note batch and return one rejected entry with the current note snapshot.
+17. Insert an outbox job if snapshot criteria are met.
+18. Pull remote changes after the supplied user cursor.
+19. Update device cursor and `last_seen_at`.
+20. Commit.
+21. Return accepted note batches, rejected note batches, pulled changes, and the next cursor.
 
 Current-state updates and change-log inserts must occur in the same database transaction.
 

@@ -34,6 +34,9 @@ type Store struct {
 	q *db.Queries
 	// inTx marks Store values that already run inside a PostgreSQL transaction.
 	inTx bool
+	// savepointSeq creates transaction-local savepoint names for partial
+	// rollbacks.
+	savepointSeq int
 }
 
 // Open builds and validates the PostgreSQL pool from runtime configuration.
@@ -101,6 +104,34 @@ func (s *Store) WithTx(ctx context.Context, fn func(*Store) error) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// WithSavepoint runs fn inside a PostgreSQL savepoint. It must be called from a
+// transaction store and lets callers roll back one unit of work without aborting
+// the parent transaction.
+func (s *Store) WithSavepoint(ctx context.Context, fn func(*Store) error) error {
+	if !s.inTx {
+		return s.WithTx(ctx, fn)
+	}
+
+	s.savepointSeq++
+	name := fmt.Sprintf("sync_savepoint_%d", s.savepointSeq)
+	if _, err := s.conn.Exec(ctx, "SAVEPOINT "+name); err != nil {
+		return err
+	}
+	if err := fn(s); err != nil {
+		if _, rollbackErr := s.conn.Exec(ctx, "ROLLBACK TO SAVEPOINT "+name); rollbackErr != nil {
+			return fmt.Errorf("%w: rollback to savepoint failed: %v", err, rollbackErr)
+		}
+		if _, releaseErr := s.conn.Exec(ctx, "RELEASE SAVEPOINT "+name); releaseErr != nil {
+			return fmt.Errorf("%w: release savepoint failed: %v", err, releaseErr)
+		}
+		return err
+	}
+	if _, err := s.conn.Exec(ctx, "RELEASE SAVEPOINT "+name); err != nil {
+		return err
+	}
+	return nil
 }
 
 // mapNoRows converts pgx's driver-specific no-row error into the package
