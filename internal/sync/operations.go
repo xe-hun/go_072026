@@ -12,22 +12,20 @@ import (
 )
 
 const (
-	// EntityNote and EntityBlock describe which table/current-state entity an
-	// operation targets.
-	// EntityNote  = "note"
-	// EntityBlock = "block"
-
 	// Note operation names.
-	OperationCreateNote = "create_note"
-	OperationUpdateNote = "update_note"
-	OperationDeleteNote = "delete_note"
+	OperationCreateNote         = "create_note"
+	OperationUpdateNote         = "update_note"
+	OperationDeleteNote         = "delete_note"
+	OperationModifyNoteProperty = "modify_note_property"
+	OperationModifyNoteTitle    = "modify_note_title"
 
 	// Block operation names.
-	OperationCreateBlock = "create_block"
-	OperationUpdateBlock = "update_block"
-	OperationDeleteBlock = "delete_block"
+	OperationCreateBlock         = "create_block"
+	OperationUpdateBlock         = "update_block"
+	OperationDeleteBlock         = "delete_block"
+	OperationModifyBlockProperty = "modify_block_property"
 
-	// Text operation names accepted by update_block.
+	// Text operation names accepted by title/block text deltas.
 	TextOperationInsert = "insert"
 	TextOperationDelete = "delete"
 
@@ -46,12 +44,12 @@ var allowedBlockTypes = map[string]struct{}{
 	"attachment":    {},
 }
 
-// structuredChange is the expected shape of changeData for v1 operations.
-type structuredChange struct {
-	// SchemaVersion defaults to 1 when omitted.
-	SchemaVersion int `json:"schemaVersion,omitempty"`
-	// Fields contains operation-specific changed fields.
-	Fields map[string]json.RawMessage `json:"fields"`
+// TextChange is the direct text delta shape used by modify_note_title and the
+// nested update_block.textDelta payload.
+type TextChange struct {
+	TextOperation string
+	Index         int
+	Text          string
 }
 
 // normalizeChangeFormat treats an omitted changeFormat as the v1 default.
@@ -62,23 +60,58 @@ func normalizeChangeFormat(format string) string {
 	return format
 }
 
-// decodeFields extracts the fields object from changeData and validates the
-// embedded schemaVersion.
-func decodeFields(raw json.RawMessage) (map[string]json.RawMessage, error) {
+// normalizeOperationType accepts the client enum-style names while storing and
+// dispatching through the existing snake_case operation names.
+func normalizeOperationType(operationType string) string {
+	switch operationType {
+	case "CreateNote":
+		return OperationCreateNote
+	case "UpdateNote":
+		return OperationUpdateNote
+	case "DeleteNote":
+		return OperationDeleteNote
+	case "ModifyNoteProperty":
+		return OperationModifyNoteProperty
+	case "ModifyNoteTitle":
+		return OperationModifyNoteTitle
+	case "CreateBlock":
+		return OperationCreateBlock
+	case "UpdateBlock":
+		return OperationUpdateBlock
+	case "DeleteBlock":
+		return OperationDeleteBlock
+	case "ModifyBlockProperty":
+		return OperationModifyBlockProperty
+	default:
+		return operationType
+	}
+}
+
+// decodeChangeObject extracts the direct object payload from changeData.
+func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]json.RawMessage{}, nil
 	}
-	var change structuredChange
-	if err := json.Unmarshal(raw, &change); err != nil {
+	return decodeObjectFields(raw, "changeData")
+}
+
+// decodeObjectFields validates and decodes a JSON object into raw field values.
+func decodeObjectFields(raw json.RawMessage, name string) (map[string]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return map[string]json.RawMessage{}, nil
+	}
+	if trimmed[0] != '{' {
+		return nil, fmt.Errorf("%s must be an object", name)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &fields); err != nil {
 		return nil, err
 	}
-	if change.SchemaVersion != 0 && change.SchemaVersion != 1 {
-		return nil, errors.New("unsupported change schema version")
+	if fields == nil {
+		fields = map[string]json.RawMessage{}
 	}
-	if change.Fields == nil {
-		change.Fields = map[string]json.RawMessage{}
-	}
-	return change.Fields, nil
+	return fields, nil
 }
 
 // getStringField reads an optional string field. The bool reports whether the
@@ -117,6 +150,9 @@ func getObjectField(fields map[string]json.RawMessage, key string) (json.RawMess
 		return nil, false, nil
 	}
 	trimmed := bytes.TrimSpace(raw)
+	if bytes.Equal(trimmed, []byte("null")) {
+		return nil, true, fmt.Errorf("%s must be an object", key)
+	}
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return nil, true, fmt.Errorf("%s must be an object", key)
 	}
@@ -127,13 +163,24 @@ func getObjectField(fields map[string]json.RawMessage, key string) (json.RawMess
 	return json.RawMessage(trimmed), true, nil
 }
 
+// getNullableObjectFields reads an optional object field. A JSON null value is
+// treated the same as omission for operation fields documented as nullable.
+func getNullableObjectFields(fields map[string]json.RawMessage, key string) (map[string]json.RawMessage, bool, error) {
+	raw, ok := fields[key]
+	if !ok || isJSONNull(raw) {
+		return nil, false, nil
+	}
+	value, err := decodeObjectFields(raw, key)
+	return value, true, err
+}
+
 // getNullableUUIDField reads an optional UUID field that can explicitly be null.
 func getNullableUUIDField(fields map[string]json.RawMessage, key string) (pgtype.UUID, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return pgtype.UUID{}, false, nil
 	}
-	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+	if isJSONNull(raw) {
 		return pgtype.UUID{}, true, nil
 	}
 	var id uuid.UUID
@@ -141,6 +188,54 @@ func getNullableUUIDField(fields map[string]json.RawMessage, key string) (pgtype
 		return pgtype.UUID{}, true, fmt.Errorf("%s must be a UUID or null", key)
 	}
 	return pgtype.UUID{Bytes: id, Valid: true}, true, nil
+}
+
+// decodeTextChange decodes a full text operation object.
+func decodeTextChange(raw json.RawMessage, name string) (TextChange, error) {
+	fields, err := decodeObjectFields(raw, name)
+	if err != nil {
+		return TextChange{}, err
+	}
+	textOperation, ok, err := getStringField(fields, "textOperation")
+	if err != nil {
+		return TextChange{}, err
+	}
+	if !ok {
+		return TextChange{}, errors.New("textOperation is required")
+	}
+	text, ok, err := getStringField(fields, "text")
+	if err != nil {
+		return TextChange{}, err
+	}
+	if !ok {
+		return TextChange{}, errors.New("text is required")
+	}
+	index, ok, err := getIntField(fields, "index")
+	if err != nil {
+		return TextChange{}, err
+	}
+	if !ok {
+		return TextChange{}, errors.New("index is required")
+	}
+	return TextChange{
+		TextOperation: textOperation,
+		Index:         index,
+		Text:          text,
+	}, nil
+}
+
+// getNullableTextChangeField reads an optional nested text operation object.
+func getNullableTextChangeField(fields map[string]json.RawMessage, key string) (TextChange, bool, error) {
+	raw, ok := fields[key]
+	if !ok || isJSONNull(raw) {
+		return TextChange{}, false, nil
+	}
+	value, err := decodeTextChange(raw, key)
+	return value, true, err
+}
+
+func isJSONNull(raw json.RawMessage) bool {
+	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
 // validateOperationShape checks operation-level invariants before any database
@@ -155,9 +250,9 @@ func validateOperationShape(op ClientOperation) error {
 	if op.Sequence < 0 {
 		return errors.New("sequence must be greater than or equal to zero")
 	}
-	switch op.OperationType {
-	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote:
-	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock:
+	switch normalizeOperationType(op.OperationType) {
+	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
+	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
 		if op.BlockID == nil || *op.BlockID == uuid.Nil {
 			return errors.New("blockId is required for block operations")
 		}
@@ -169,19 +264,6 @@ func validateOperationShape(op ClientOperation) error {
 	}
 	return nil
 }
-
-// entityTypeForOperation returns the current-state entity affected by an
-// already validated operation type.
-// func entityTypeForOperation(operationType string) string {
-// 	switch operationType {
-// 	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote:
-// 		return EntityNote
-// 	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock:
-// 		return EntityBlock
-// 	default:
-// 		return ""
-// 	}
-// }
 
 // validateBlockType enforces the block type allow-list.
 func validateBlockType(blockType string) error {

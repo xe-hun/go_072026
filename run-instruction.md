@@ -234,12 +234,9 @@ Generate UUIDs for the operation and note. Then send:
       "baseNoteVersion": 0,
       "changeFormat": "structured-operation-v1",
       "changeData": {
-        "schemaVersion": 1,
-        "fields": {
-          "title": "Shopping",
-          "metadata": {
-            "isPinned": true
-          }
+        "title": "Shopping",
+        "metadata": {
+          "isPinned": true
         }
       }
     }
@@ -270,11 +267,12 @@ Use the note version returned from the note creation response:
       "baseNoteVersion": 1,
       "changeFormat": "structured-operation-v1",
       "changeData": {
-        "schemaVersion": 1,
-        "fields": {
+        "position": 1,
+        "block": {
+          "id": "<BLOCK_ID>",
+          "noteId": "<NOTE_ID>",
           "blockType": "todo",
           "textContent": "Buy milk",
-          "position": "a0",
           "properties": {
             "isChecked": false
           }

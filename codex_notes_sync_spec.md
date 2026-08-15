@@ -330,7 +330,6 @@ CREATE TABLE note_changes (
     block_id UUID,
     device_id UUID NOT NULL REFERENCES sync_devices(id),
     client_operation_id UUID NOT NULL,
-    entity_type TEXT NOT NULL,
     operation_type TEXT NOT NULL,
     base_note_version BIGINT NOT NULL,
     resulting_note_version BIGINT NOT NULL,
@@ -350,33 +349,30 @@ CREATE INDEX note_changes_note_version_idx
     ON note_changes (note_id, resulting_note_version);
 ```
 
-Initial entity types:
-
-- note
-- block
-
 Initial operation types:
 
 - create_note
 - update_note
 - delete_note
+- modify_note_property
+- modify_note_title
 - create_block
 - update_block
 - delete_block
+- modify_block_property
 
 Example change payload:
 
 ```json
 {
-  "schemaVersion": 1,
-  "fields": {
-    "textDelta": " and bread",
-    "textOperationType": "insert",
+  "changedProperties": {
+    "isChecked": false,
+    "isBold": true
+  },
+  "textDelta": {
+    "textOperation": "insert",
     "index": 8,
-    "properties": {
-      "isChecked": false,
-      "isBold": true
-    }
+    "text": " and bread"
   }
 }
 ```
@@ -505,10 +501,10 @@ Accept-Encoding: gzip
       "baseNoteVersion": 17,
       "changeFormat": "structured-operation-v1",
       "changeData": {
-        "fields": {
-          "textDelta": "Updated text",
-          "textOperationType": "insert",
-          "index": 13
+        "textDelta": {
+          "textOperation": "insert",
+          "index": 13,
+          "text": "Updated text"
         }
       }
     }

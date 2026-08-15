@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -250,7 +251,7 @@ func (s *Service) rejectedOperationBatch(ctx context.Context, tx *store.Store, o
 	if err != nil {
 		return RejectedOperation{}, err
 	}
-	snapshot := mapRejectedSnapshot(doc)
+	snapshot := mapNoteSnapshot(doc)
 	rejected.NoteSnapshot = &snapshot
 	if rejected.ServerNoteVersion == 0 {
 		rejected.ServerNoteVersion = doc.Note.CurrentVersion
@@ -293,8 +294,9 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
+	op.OperationType = normalizeOperationType(op.OperationType)
 
-	fields, err := decodeFields(op.ChangeData)
+	fields, err := decodeChangeObject(op.ChangeData)
 	if err != nil {
 		rejected := rejectedInvalid(op, "changeData is invalid.")
 		return nil, &rejected, nil
@@ -303,11 +305,11 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 	switch op.OperationType {
 	case OperationCreateNote:
 		return s.createNote(ctx, tx, ownerID, deviceID, op, fields)
-	case OperationUpdateNote, OperationDeleteNote:
+	case OperationUpdateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
 		return s.mutateNote(ctx, tx, ownerID, deviceID, op, fields)
 	case OperationCreateBlock:
 		return s.createBlock(ctx, tx, ownerID, deviceID, op, fields)
-	case OperationUpdateBlock, OperationDeleteBlock:
+	case OperationUpdateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
 		return s.mutateBlock(ctx, tx, ownerID, deviceID, op, fields)
 	default:
 		rejected := rejectedInvalid(op, "operationType is unsupported.")
@@ -413,7 +415,43 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 		} else if ok {
 			note.CategoryID = categoryID
 		}
+	case OperationModifyNoteProperty:
+		if len(fields) == 0 {
+			rejected := rejectedInvalid(op, "modify_note_property must include at least one property.")
+			return nil, &rejected, nil
+		}
+		metadata, err := mergeJSONProperties(note.Metadata, fields, "metadata")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		note.Metadata = metadata
+	case OperationModifyNoteTitle:
+		textChange, err := decodeTextChange(op.ChangeData, "changeData")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		title, err := applyTextDelta(note.Title, textChange.Text, textChange.TextOperation, textChange.Index)
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		note.Title = title
 	case OperationDeleteNote:
+		position, ok, err := getIntField(fields, "position")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		if !ok {
+			rejected := rejectedInvalid(op, "position is required.")
+			return nil, &rejected, nil
+		}
+		if position < 0 {
+			rejected := rejectedInvalid(op, "position must be greater than or equal to zero.")
+			return nil, &rejected, nil
+		}
 		// Deletion is soft: the row remains so tombstones can sync to offline
 		// devices.
 		note.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
@@ -451,29 +489,70 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		return nil, &rejected, nil
 	}
 
-	blockType, ok, err := getStringField(fields, "blockType")
-	if err != nil || !ok {
-		rejected := rejectedInvalid(op, "blockType is required.")
+	position, ok, err := getIntField(fields, "position")
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if !ok {
+		rejected := rejectedInvalid(op, "position is required.")
+		return nil, &rejected, nil
+	}
+	if position < 0 {
+		rejected := rejectedInvalid(op, "position must be greater than or equal to zero.")
+		return nil, &rejected, nil
+	}
+	blockRaw, ok, err := getObjectField(fields, "block")
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if !ok {
+		rejected := rejectedInvalid(op, "block is required.")
+		return nil, &rejected, nil
+	}
+	blockSnapshot, blockFields, err := decodeBlockSnapshot(blockRaw)
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if blockSnapshot.ID != uuid.Nil && blockSnapshot.ID != *op.BlockID {
+		rejected := rejectedInvalid(op, "block.id must match blockId.")
+		return nil, &rejected, nil
+	}
+	if blockSnapshot.NoteID != uuid.Nil && blockSnapshot.NoteID != op.NoteID {
+		rejected := rejectedInvalid(op, "block.noteId must match noteId.")
+		return nil, &rejected, nil
+	}
+	blockType := blockSnapshot.BlockType
+	if blockType == "" {
+		blockType, _, err = getStringField(blockFields, "type")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+	}
+	if blockType == "" {
+		rejected := rejectedInvalid(op, "block.blockType is required.")
 		return nil, &rejected, nil
 	}
 	if err := validateBlockType(blockType); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
-	position, ok, err := getStringField(fields, "position")
-	if err != nil || !ok || position == "" {
-		rejected := rejectedInvalid(op, "position is required.")
-		return nil, &rejected, nil
-	}
-	text, ok, err := getStringField(fields, "textContent")
+	text, ok, err := getStringField(blockFields, "textContent")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if !ok {
-		text = ""
+		text, _, err = getStringField(blockFields, "text")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
 	}
-	properties, ok, err := getObjectField(fields, "properties")
+	properties, ok, err := getObjectField(blockFields, "properties")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
@@ -494,7 +573,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		NoteID:      note.ID,
 		BlockType:   blockType,
 		TextContent: text,
-		Position:    position,
+		Position:    strconv.Itoa(position),
 		Properties:  properties,
 	})
 	if err != nil {
@@ -544,46 +623,26 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	switch op.OperationType {
 	case OperationUpdateBlock:
 		changed := false
-		if blockType, ok, err := getStringField(fields, "blockType"); err != nil {
+		if changedProperties, ok, err := getNullableObjectFields(fields, "changedProperties"); err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		} else if ok {
-			if err := validateBlockType(blockType); err != nil {
+			properties, err := mergeJSONProperties(block.Properties, changedProperties, "properties")
+			if err != nil {
 				rejected := rejectedInvalid(op, err.Error())
 				return nil, &rejected, nil
 			}
-			block.BlockType = blockType
-			changed = true
-		}
-		if properties, ok, err := getObjectField(fields, "properties"); err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		} else if ok {
 			block.Properties = properties
-			changed = true
+			changed = len(changedProperties) > 0
 		}
 
-		textDelta, hasTextDelta, err := getStringField(fields, "textDelta")
+		textChange, hasTextDelta, err := getNullableTextChangeField(fields, "textDelta")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		textOperationType, hasTextOperationType, err := getStringField(fields, "textOperationType")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		index, hasIndex, err := getIntField(fields, "index")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		if hasTextDelta || hasTextOperationType || hasIndex {
-			if !hasTextDelta || !hasTextOperationType || !hasIndex {
-				rejected := rejectedInvalid(op, "textDelta, textOperationType, and index are required together.")
-				return nil, &rejected, nil
-			}
-			text, err := applyTextDelta(block.TextContent, textDelta, textOperationType, index)
+		if hasTextDelta {
+			text, err := applyTextDelta(block.TextContent, textChange.Text, textChange.TextOperation, textChange.Index)
 			if err != nil {
 				rejected := rejectedInvalid(op, err.Error())
 				return nil, &rejected, nil
@@ -595,6 +654,17 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 			rejected := rejectedInvalid(op, "update_block must include at least one supported field.")
 			return nil, &rejected, nil
 		}
+	case OperationModifyBlockProperty:
+		if len(fields) == 0 {
+			rejected := rejectedInvalid(op, "modify_block_property must include at least one property.")
+			return nil, &rejected, nil
+		}
+		properties, err := mergeJSONProperties(block.Properties, fields, "properties")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		block.Properties = properties
 	case OperationDeleteBlock:
 		// Deletion is soft so offline devices can receive the tombstone later.
 		block.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
@@ -618,7 +688,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 }
 
 // applyTextDelta applies an insert/delete to text using rune indexes. The
-// delete length is the length of textDelta.
+// delete length is the length of text.
 func applyTextDelta(current, delta, operationType string, index int) (string, error) {
 	if index < 0 {
 		return "", errors.New("index must be greater than or equal to zero")
@@ -628,7 +698,7 @@ func applyTextDelta(current, delta, operationType string, index int) (string, er
 	switch operationType {
 	case TextOperationInsert:
 		if index > len(textRunes) {
-			return "", errors.New("index is outside the current block text")
+			return "", errors.New("index is outside the current text")
 		}
 		next := make([]rune, 0, len(textRunes)+len(deltaRunes))
 		next = append(next, textRunes[:index]...)
@@ -637,27 +707,66 @@ func applyTextDelta(current, delta, operationType string, index int) (string, er
 		return string(next), nil
 	case TextOperationDelete:
 		if index > len(textRunes) || index+len(deltaRunes) > len(textRunes) {
-			return "", errors.New("delete range is outside the current block text")
+			return "", errors.New("delete range is outside the current text")
 		}
 		next := make([]rune, 0, len(textRunes)-len(deltaRunes))
 		next = append(next, textRunes[:index]...)
 		next = append(next, textRunes[index+len(deltaRunes):]...)
 		return string(next), nil
 	default:
-		return "", errors.New("textOperationType must be insert or delete")
+		return "", errors.New("textOperation must be insert or delete")
 	}
+}
+
+func decodeBlockSnapshot(raw json.RawMessage) (BlockSnapshot, map[string]json.RawMessage, error) {
+	fields, err := decodeObjectFields(raw, "block")
+	if err != nil {
+		return BlockSnapshot{}, nil, err
+	}
+	block := BlockSnapshot{}
+	if rawID, ok := fields["id"]; ok && !isJSONNull(rawID) {
+		if err := json.Unmarshal(rawID, &block.ID); err != nil {
+			return BlockSnapshot{}, nil, errors.New("block.id must be a UUID")
+		}
+	}
+	if rawNoteID, ok := fields["noteId"]; ok && !isJSONNull(rawNoteID) {
+		if err := json.Unmarshal(rawNoteID, &block.NoteID); err != nil {
+			return BlockSnapshot{}, nil, errors.New("block.noteId must be a UUID")
+		}
+	}
+	blockType, _, err := getStringField(fields, "blockType")
+	if err != nil {
+		return BlockSnapshot{}, nil, err
+	}
+	block.BlockType = blockType
+	text, _, err := getStringField(fields, "textContent")
+	if err != nil {
+		return BlockSnapshot{}, nil, err
+	}
+	block.TextContent = text
+	return block, fields, nil
+}
+
+func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMessage, name string) (json.RawMessage, error) {
+	merged, err := decodeObjectFields(store.NormalizeJSON(current), name)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range changes {
+		merged[key] = value
+	}
+	return json.Marshal(merged)
 }
 
 // insertChange writes the append-only history row for an accepted operation.
 func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
 	return tx.InsertNoteChange(ctx, store.InsertNoteChangeParams{
-		ID:                uuid.New(),
-		OwnerID:           ownerID,
-		NoteID:            op.NoteID,
-		BlockID:           blockID,
-		DeviceID:          deviceID,
-		ClientOperationID: op.OperationID,
-		// EntityType:           entityTypeForOperation(op.OperationType),
+		ID:                   uuid.New(),
+		OwnerID:              ownerID,
+		NoteID:               op.NoteID,
+		BlockID:              blockID,
+		DeviceID:             deviceID,
+		ClientOperationID:    op.OperationID,
 		OperationType:        op.OperationType,
 		BaseNoteVersion:      baseNoteVersion,
 		ResultingNoteVersion: resultingNoteVersion,
@@ -709,7 +818,6 @@ func mapPulledChange(change store.NoteChange) PulledChange {
 		NoteID:               change.NoteID,
 		BlockID:              store.UUIDPtr(change.BlockID),
 		DeviceID:             change.DeviceID,
-		EntityType:           change.EntityType,
 		OperationType:        change.OperationType,
 		BaseNoteVersion:      change.BaseNoteVersion,
 		ResultingNoteVersion: change.ResultingNoteVersion,
@@ -721,11 +829,11 @@ func mapPulledChange(change store.NoteChange) PulledChange {
 	}
 }
 
-// mapRejectedSnapshot maps current note state into the sync rejection payload.
-func mapRejectedSnapshot(doc store.NoteDocument) RejectedSnapshot {
-	blocks := make([]RejectedBlock, 0, len(doc.Blocks))
+// mapNoteSnapshot maps current note state into the sync rejection payload.
+func mapNoteSnapshot(doc store.NoteDocument) NoteSnapshot {
+	blocks := make([]BlockSnapshot, 0, len(doc.Blocks))
 	for _, block := range doc.Blocks {
-		blocks = append(blocks, RejectedBlock{
+		blocks = append(blocks, BlockSnapshot{
 			ID:          block.ID,
 			NoteID:      block.NoteID,
 			BlockType:   block.BlockType,
@@ -737,7 +845,7 @@ func mapRejectedSnapshot(doc store.NoteDocument) RejectedSnapshot {
 			DeletedAt:   store.TimePtr(block.DeletedAt),
 		})
 	}
-	return RejectedSnapshot{
+	return NoteSnapshot{
 		ID:             doc.Note.ID,
 		OwnerID:        doc.Note.OwnerID,
 		CategoryID:     store.UUIDPtr(doc.Note.CategoryID),

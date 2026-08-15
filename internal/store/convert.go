@@ -94,7 +94,6 @@ func fromDBChange(value db.NoteChange) NoteChange {
 		BlockID:              value.BlockID,
 		DeviceID:             uuid.UUID(value.DeviceID.Bytes),
 		ClientOperationID:    uuid.UUID(value.ClientOperationID.Bytes),
-		EntityType:           value.EntityType,
 		OperationType:        value.OperationType,
 		BaseNoteVersion:      value.BaseNoteVersion,
 		ResultingNoteVersion: value.ResultingNoteVersion,

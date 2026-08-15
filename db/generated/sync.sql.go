@@ -31,7 +31,7 @@ func (q *Queries) CountChangesSinceLastSnapshot(ctx context.Context, noteID pgty
 }
 
 const findProcessedOperation = `-- name: FindProcessedOperation :one
-SELECT id, owner_id, note_id, block_id, device_id, client_operation_id, entity_type, operation_type, base_note_version, resulting_note_version, change_format, schema_version, change_data, global_sequence, created_at
+SELECT id, owner_id, note_id, block_id, device_id, client_operation_id, operation_type, base_note_version, resulting_note_version, change_format, schema_version, change_data, global_sequence, created_at
 FROM note_changes
 WHERE device_id = $1
   AND client_operation_id = $2
@@ -53,7 +53,6 @@ func (q *Queries) FindProcessedOperation(ctx context.Context, arg FindProcessedO
 		&i.BlockID,
 		&i.DeviceID,
 		&i.ClientOperationID,
-		&i.EntityType,
 		&i.OperationType,
 		&i.BaseNoteVersion,
 		&i.ResultingNoteVersion,
@@ -67,7 +66,7 @@ func (q *Queries) FindProcessedOperation(ctx context.Context, arg FindProcessedO
 }
 
 const getChangesAfterCursor = `-- name: GetChangesAfterCursor :many
-SELECT id, owner_id, note_id, block_id, device_id, client_operation_id, entity_type, operation_type, base_note_version, resulting_note_version, change_format, schema_version, change_data, global_sequence, created_at
+SELECT id, owner_id, note_id, block_id, device_id, client_operation_id, operation_type, base_note_version, resulting_note_version, change_format, schema_version, change_data, global_sequence, created_at
 FROM note_changes
 WHERE owner_id = $1
   AND global_sequence > $2
@@ -105,7 +104,6 @@ func (q *Queries) GetChangesAfterCursor(ctx context.Context, arg GetChangesAfter
 			&i.BlockID,
 			&i.DeviceID,
 			&i.ClientOperationID,
-			&i.EntityType,
 			&i.OperationType,
 			&i.BaseNoteVersion,
 			&i.ResultingNoteVersion,
@@ -133,7 +131,6 @@ INSERT INTO note_changes (
     block_id,
     device_id,
     client_operation_id,
-    entity_type,
     operation_type,
     base_note_version,
     resulting_note_version,
@@ -141,9 +138,9 @@ INSERT INTO note_changes (
     schema_version,
     change_data
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, owner_id, note_id, block_id, device_id, client_operation_id, entity_type, operation_type, base_note_version, resulting_note_version, change_format, schema_version, change_data, global_sequence, created_at
+RETURNING id, owner_id, note_id, block_id, device_id, client_operation_id, operation_type, base_note_version, resulting_note_version, change_format, schema_version, change_data, global_sequence, created_at
 `
 
 type InsertNoteChangeParams struct {
@@ -153,7 +150,6 @@ type InsertNoteChangeParams struct {
 	BlockID              pgtype.UUID `json:"block_id"`
 	DeviceID             pgtype.UUID `json:"device_id"`
 	ClientOperationID    pgtype.UUID `json:"client_operation_id"`
-	EntityType           string      `json:"entity_type"`
 	OperationType        string      `json:"operation_type"`
 	BaseNoteVersion      int64       `json:"base_note_version"`
 	ResultingNoteVersion int64       `json:"resulting_note_version"`
@@ -171,7 +167,6 @@ func (q *Queries) InsertNoteChange(ctx context.Context, arg InsertNoteChangePara
 		arg.BlockID,
 		arg.DeviceID,
 		arg.ClientOperationID,
-		arg.EntityType,
 		arg.OperationType,
 		arg.BaseNoteVersion,
 		arg.ResultingNoteVersion,
@@ -187,7 +182,6 @@ func (q *Queries) InsertNoteChange(ctx context.Context, arg InsertNoteChangePara
 		&i.BlockID,
 		&i.DeviceID,
 		&i.ClientOperationID,
-		&i.EntityType,
 		&i.OperationType,
 		&i.BaseNoteVersion,
 		&i.ResultingNoteVersion,

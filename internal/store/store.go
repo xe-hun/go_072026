@@ -90,8 +90,6 @@ type NoteChange struct {
 	DeviceID uuid.UUID
 	// ClientOperationID is the stable operation UUID used for idempotency.
 	ClientOperationID uuid.UUID
-	// EntityType is "note" or "block".
-	EntityType string
 	// OperationType is the concrete operation, for example update_block.
 	OperationType string
 	// BaseNoteVersion is the client version before the operation.
@@ -175,7 +173,6 @@ type InsertNoteChangeParams struct {
 	BlockID           *uuid.UUID
 	DeviceID          uuid.UUID
 	ClientOperationID uuid.UUID
-	EntityType        string
 	OperationType     string
 	// Base/resulting versions are copied into history for conflict diagnostics
 	// and deterministic replay.

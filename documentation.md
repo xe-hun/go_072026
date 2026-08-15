@@ -163,7 +163,7 @@ The service:
 4. Sorts operations by `noteId` and then client `sequence`.
 5. Applies each note's operations as one savepoint-backed batch.
 6. Looks up `(device_id, operation_id)` to make retries idempotent.
-7. Validates entity type, operation type, block ID requirements, change format, and change schema.
+7. Validates operation type, block ID requirements, change format, and changeData shape.
 8. Locks affected note and block rows with `FOR UPDATE`.
 9. Compares client note base versions to server versions.
 10. Applies valid operations to current state.

@@ -84,21 +84,21 @@ type AcceptedOperation struct {
 // RejectedOperation reports why one note batch in an otherwise valid sync
 // request could not be applied.
 type RejectedOperation struct {
-	OperationID  uuid.UUID         `json:"operationId"`
-	OperationIDs []uuid.UUID       `json:"operationIds,omitempty"`
-	Code         string            `json:"code"`
-	Message      string            `json:"message,omitempty"`
-	NoteID       uuid.UUID         `json:"noteId,omitempty"`
-	BlockID      *uuid.UUID        `json:"blockId,omitempty"`
-	NoteSnapshot *RejectedSnapshot `json:"noteSnapshot,omitempty"`
+	OperationID  uuid.UUID     `json:"operationId"`
+	OperationIDs []uuid.UUID   `json:"operationIds,omitempty"`
+	Code         string        `json:"code"`
+	Message      string        `json:"message,omitempty"`
+	NoteID       uuid.UUID     `json:"noteId,omitempty"`
+	BlockID      *uuid.UUID    `json:"blockId,omitempty"`
+	NoteSnapshot *NoteSnapshot `json:"noteSnapshot,omitempty"`
 	// Client/server versions are included for conflict resolution UI.
 	ClientNoteVersion int64 `json:"clientNoteVersion,omitempty"`
 	ServerNoteVersion int64 `json:"serverNoteVersion,omitempty"`
 }
 
-// RejectedSnapshot is the current note state returned once for a rejected note
+// NoteSnapshot is the current note state returned once for a rejected note
 // batch so clients can reset conflict UI to the server-authoritative document.
-type RejectedSnapshot struct {
+type NoteSnapshot struct {
 	ID             uuid.UUID       `json:"id"`
 	OwnerID        uuid.UUID       `json:"ownerId"`
 	CategoryID     *uuid.UUID      `json:"categoryId,omitempty"`
@@ -108,11 +108,11 @@ type RejectedSnapshot struct {
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
 	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
-	Blocks         []RejectedBlock `json:"blocks"`
+	Blocks         []BlockSnapshot `json:"blocks"`
 }
 
-// RejectedBlock is one block inside a rejected batch's current note snapshot.
-type RejectedBlock struct {
+// BlockSnapshot is one block inside a current note snapshot.
+type BlockSnapshot struct {
 	ID          uuid.UUID       `json:"id"`
 	NoteID      uuid.UUID       `json:"noteId"`
 	BlockType   string          `json:"blockType"`
@@ -131,7 +131,6 @@ type PulledChange struct {
 	NoteID        uuid.UUID  `json:"noteId"`
 	BlockID       *uuid.UUID `json:"blockId,omitempty"`
 	DeviceID      uuid.UUID  `json:"deviceId"`
-	EntityType    string     `json:"entityType"`
 	OperationType string     `json:"operationType"`
 	// Base/resulting versions let clients apply or inspect changes in order.
 	BaseNoteVersion      int64           `json:"baseNoteVersion"`

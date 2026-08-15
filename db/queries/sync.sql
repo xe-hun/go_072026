@@ -14,7 +14,6 @@ INSERT INTO note_changes (
     block_id,
     device_id,
     client_operation_id,
-    entity_type,
     operation_type,
     base_note_version,
     resulting_note_version,
@@ -22,7 +21,7 @@ INSERT INTO note_changes (
     schema_version,
     change_data
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 RETURNING *;
 

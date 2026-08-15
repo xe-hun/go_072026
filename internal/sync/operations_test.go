@@ -35,9 +35,9 @@ func TestValidateOperationShapeRequiresNonNegativeSequence(t *testing.T) {
 	}
 }
 
-// TestValidateOperationShapeDoesNotRequireEntityType keeps operation type as
-// the single client-provided discriminator.
-func TestValidateOperationShapeDoesNotRequireEntityType(t *testing.T) {
+// TestValidateOperationShapeUsesOperationTypeDiscriminator keeps operation type
+// as the single client-provided discriminator.
+func TestValidateOperationShapeUsesOperationTypeDiscriminator(t *testing.T) {
 	op := ClientOperation{
 		OperationID:     uuid.New(),
 		NoteID:          uuid.New(),
@@ -45,7 +45,23 @@ func TestValidateOperationShapeDoesNotRequireEntityType(t *testing.T) {
 		BaseNoteVersion: 1,
 	}
 	if err := validateOperationShape(op); err != nil {
-		t.Fatalf("expected operation without entityType to pass validation: %v", err)
+		t.Fatalf("expected operation to pass validation: %v", err)
+	}
+}
+
+// TestValidateOperationShapeAcceptsNewOperationTypes protects the note/block
+// operation names used by the direct changeData payloads.
+func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {
+	blockID := uuid.New()
+	ops := []ClientOperation{
+		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyNoteProperty},
+		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: "ModifyNoteTitle"},
+		{OperationID: uuid.New(), NoteID: uuid.New(), BlockID: &blockID, OperationType: "ModifyBlockProperty"},
+	}
+	for _, op := range ops {
+		if err := validateOperationShape(op); err != nil {
+			t.Fatalf("expected %s to pass validation: %v", op.OperationType, err)
+		}
 	}
 }
 
@@ -71,12 +87,24 @@ func TestSortedOperationsOrdersByNoteThenSequence(t *testing.T) {
 	}
 }
 
-// TestDecodeFieldsRejectsUnsupportedSchemaVersion ensures clients cannot submit
-// future/unknown change schemas silently.
-func TestDecodeFieldsRejectsUnsupportedSchemaVersion(t *testing.T) {
-	raw := json.RawMessage(`{"schemaVersion":2,"fields":{"title":"x"}}`)
-	if _, err := decodeFields(raw); err == nil {
-		t.Fatal("expected unsupported change schema version to fail")
+// TestDecodeChangeObjectRejectsNonObject ensures operation payloads use the
+// direct object shape.
+func TestDecodeChangeObjectRejectsNonObject(t *testing.T) {
+	raw := json.RawMessage(`[]`)
+	if _, err := decodeChangeObject(raw); err == nil {
+		t.Fatal("expected non-object changeData to fail")
+	}
+}
+
+// TestDecodeTextChangeRequiresDirectShape verifies the title/block text delta
+// object expected by modify_note_title and update_block.
+func TestDecodeTextChangeRequiresDirectShape(t *testing.T) {
+	change, err := decodeTextChange(json.RawMessage(`{"textOperation":"insert","index":1,"text":"e"}`), "changeData")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.TextOperation != TextOperationInsert || change.Index != 1 || change.Text != "e" {
+		t.Fatalf("unexpected text change: %+v", change)
 	}
 }
 

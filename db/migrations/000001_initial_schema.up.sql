@@ -74,7 +74,6 @@ CREATE TABLE note_changes (
     block_id UUID,
     device_id UUID NOT NULL REFERENCES sync_devices(id),
     client_operation_id UUID NOT NULL,
-    entity_type TEXT NOT NULL,
     operation_type TEXT NOT NULL,
     base_note_version BIGINT NOT NULL,
     resulting_note_version BIGINT NOT NULL,

@@ -48,7 +48,6 @@ type NoteChange struct {
 	BlockID              pgtype.UUID        `json:"block_id"`
 	DeviceID             pgtype.UUID        `json:"device_id"`
 	ClientOperationID    pgtype.UUID        `json:"client_operation_id"`
-	EntityType           string             `json:"entity_type"`
 	OperationType        string             `json:"operation_type"`
 	BaseNoteVersion      int64              `json:"base_note_version"`
 	ResultingNoteVersion int64              `json:"resulting_note_version"`

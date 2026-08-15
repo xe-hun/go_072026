@@ -33,7 +33,6 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 		BlockID:              blockID,
 		DeviceID:             pgUUID(arg.DeviceID),
 		ClientOperationID:    pgUUID(arg.ClientOperationID),
-		EntityType:           arg.EntityType,
 		OperationType:        arg.OperationType,
 		BaseNoteVersion:      arg.BaseNoteVersion,
 		ResultingNoteVersion: arg.ResultingNoteVersion,
