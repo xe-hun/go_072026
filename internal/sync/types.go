@@ -36,8 +36,6 @@ type ClientOperation struct {
 	NoteID uuid.UUID `json:"noteId"`
 	// BlockID is required for block operations and omitted for note operations.
 	BlockID *uuid.UUID `json:"blockId,omitempty"`
-	// EntityType is "note" or "block".
-	EntityType string `json:"entityType"`
 	// OperationType is the concrete operation name.
 	OperationType string `json:"operationType"`
 	// Sequence orders client operations within a note batch.

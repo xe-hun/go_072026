@@ -651,13 +651,13 @@ func applyTextDelta(current, delta, operationType string, index int) (string, er
 // insertChange writes the append-only history row for an accepted operation.
 func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
 	return tx.InsertNoteChange(ctx, store.InsertNoteChangeParams{
-		ID:                   uuid.New(),
-		OwnerID:              ownerID,
-		NoteID:               op.NoteID,
-		BlockID:              blockID,
-		DeviceID:             deviceID,
-		ClientOperationID:    op.OperationID,
-		EntityType:           op.EntityType,
+		ID:                uuid.New(),
+		OwnerID:           ownerID,
+		NoteID:            op.NoteID,
+		BlockID:           blockID,
+		DeviceID:          deviceID,
+		ClientOperationID: op.OperationID,
+		// EntityType:           entityTypeForOperation(op.OperationType),
 		OperationType:        op.OperationType,
 		BaseNoteVersion:      baseNoteVersion,
 		ResultingNoteVersion: resultingNoteVersion,

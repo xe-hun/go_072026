@@ -500,7 +500,6 @@ Accept-Encoding: gzip
       "operationId": "uuid",
       "noteId": "uuid",
       "blockId": "uuid",
-      "entityType": "block",
       "operationType": "update_block",
       "sequence": 3,
       "baseNoteVersion": 17,

@@ -14,8 +14,8 @@ import (
 const (
 	// EntityNote and EntityBlock describe which table/current-state entity an
 	// operation targets.
-	EntityNote  = "note"
-	EntityBlock = "block"
+	// EntityNote  = "note"
+	// EntityBlock = "block"
 
 	// Note operation names.
 	OperationCreateNote = "create_note"
@@ -157,13 +157,7 @@ func validateOperationShape(op ClientOperation) error {
 	}
 	switch op.OperationType {
 	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote:
-		if op.EntityType != EntityNote {
-			return errors.New("note operation must use entityType note")
-		}
 	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock:
-		if op.EntityType != EntityBlock {
-			return errors.New("block operation must use entityType block")
-		}
 		if op.BlockID == nil || *op.BlockID == uuid.Nil {
 			return errors.New("blockId is required for block operations")
 		}
@@ -175,6 +169,19 @@ func validateOperationShape(op ClientOperation) error {
 	}
 	return nil
 }
+
+// entityTypeForOperation returns the current-state entity affected by an
+// already validated operation type.
+// func entityTypeForOperation(operationType string) string {
+// 	switch operationType {
+// 	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote:
+// 		return EntityNote
+// 	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock:
+// 		return EntityBlock
+// 	default:
+// 		return ""
+// 	}
+// }
 
 // validateBlockType enforces the block type allow-list.
 func validateBlockType(blockType string) error {

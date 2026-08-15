@@ -13,7 +13,6 @@ func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
 	op := ClientOperation{
 		OperationID:   uuid.New(),
 		NoteID:        uuid.New(),
-		EntityType:    EntityBlock,
 		OperationType: OperationUpdateBlock,
 	}
 	if err := validateOperationShape(op); err == nil {
@@ -27,13 +26,26 @@ func TestValidateOperationShapeRequiresNonNegativeSequence(t *testing.T) {
 	op := ClientOperation{
 		OperationID:     uuid.New(),
 		NoteID:          uuid.New(),
-		EntityType:      EntityNote,
 		OperationType:   OperationUpdateNote,
 		Sequence:        -1,
 		BaseNoteVersion: 1,
 	}
 	if err := validateOperationShape(op); err == nil {
 		t.Fatal("expected negative sequence to fail validation")
+	}
+}
+
+// TestValidateOperationShapeDoesNotRequireEntityType keeps operation type as
+// the single client-provided discriminator.
+func TestValidateOperationShapeDoesNotRequireEntityType(t *testing.T) {
+	op := ClientOperation{
+		OperationID:     uuid.New(),
+		NoteID:          uuid.New(),
+		OperationType:   OperationUpdateNote,
+		BaseNoteVersion: 1,
+	}
+	if err := validateOperationShape(op); err != nil {
+		t.Fatalf("expected operation without entityType to pass validation: %v", err)
 	}
 }
 
