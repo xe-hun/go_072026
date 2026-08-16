@@ -14,7 +14,6 @@ import (
 const (
 	// Note operation names.
 	OperationCreateNote         = "create_note"
-	OperationUpdateNote         = "update_note"
 	OperationDeleteNote         = "delete_note"
 	OperationModifyNoteProperty = "modify_note_property"
 	OperationModifyNoteTitle    = "modify_note_title"
@@ -66,8 +65,6 @@ func normalizeOperationType(operationType string) string {
 	switch operationType {
 	case "CreateNote":
 		return OperationCreateNote
-	case "UpdateNote":
-		return OperationUpdateNote
 	case "DeleteNote":
 		return OperationDeleteNote
 	case "ModifyNoteProperty":
@@ -87,7 +84,7 @@ func normalizeOperationType(operationType string) string {
 	}
 }
 
-// decodeChangeObject extracts the direct object payload from changeData.
+// // decodeChangeObject extracts the direct object payload from changeData.
 func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]json.RawMessage{}, nil
@@ -98,12 +95,7 @@ func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error)
 // decodeObjectFields validates and decodes a JSON object into raw field values.
 func decodeObjectFields(raw json.RawMessage, name string) (map[string]json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return map[string]json.RawMessage{}, nil
-	}
-	if trimmed[0] != '{' {
-		return nil, fmt.Errorf("%s must be an object", name)
-	}
+
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(trimmed, &fields); err != nil {
 		return nil, err
@@ -251,7 +243,7 @@ func validateOperationShape(op ClientOperation) error {
 		return errors.New("sequence must be greater than or equal to zero")
 	}
 	switch normalizeOperationType(op.OperationType) {
-	case OperationCreateNote, OperationUpdateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
+	case OperationCreateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
 	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
 		if op.BlockID == nil || *op.BlockID == uuid.Nil {
 			return errors.New("blockId is required for block operations")

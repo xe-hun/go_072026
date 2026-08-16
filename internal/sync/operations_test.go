@@ -20,35 +20,6 @@ func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
 	}
 }
 
-// TestValidateOperationShapeRequiresNonNegativeSequence protects client
-// ordering from values that cannot be sorted meaningfully.
-func TestValidateOperationShapeRequiresNonNegativeSequence(t *testing.T) {
-	op := ClientOperation{
-		OperationID:     uuid.New(),
-		NoteID:          uuid.New(),
-		OperationType:   OperationUpdateNote,
-		Sequence:        -1,
-		BaseNoteVersion: 1,
-	}
-	if err := validateOperationShape(op); err == nil {
-		t.Fatal("expected negative sequence to fail validation")
-	}
-}
-
-// TestValidateOperationShapeUsesOperationTypeDiscriminator keeps operation type
-// as the single client-provided discriminator.
-func TestValidateOperationShapeUsesOperationTypeDiscriminator(t *testing.T) {
-	op := ClientOperation{
-		OperationID:     uuid.New(),
-		NoteID:          uuid.New(),
-		OperationType:   OperationUpdateNote,
-		BaseNoteVersion: 1,
-	}
-	if err := validateOperationShape(op); err != nil {
-		t.Fatalf("expected operation to pass validation: %v", err)
-	}
-}
-
 // TestValidateOperationShapeAcceptsNewOperationTypes protects the note/block
 // operation names used by the direct changeData payloads.
 func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {

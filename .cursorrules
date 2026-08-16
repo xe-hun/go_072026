@@ -1,0 +1,8 @@
+Follow the repository-wide coding-agent instructions in AGENTS.md.
+
+Shared slash directives:
+- /dev: development-stage mode; implement requested changes directly without backward compatibility or legacy support unless explicitly requested.
+- /no-test: do not write or run tests for the active task or session.
+- /docu: update project documentation for code changes made in the active task or session.
+
+Also recognize wrapped forms such as -/dev-, -/no-test-, and -/docu- as aliases.

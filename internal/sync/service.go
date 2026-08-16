@@ -305,7 +305,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 	switch op.OperationType {
 	case OperationCreateNote:
 		return s.createNote(ctx, tx, ownerID, deviceID, op, fields)
-	case OperationUpdateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
+	case OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
 		return s.mutateNote(ctx, tx, ownerID, deviceID, op, fields)
 	case OperationCreateBlock:
 		return s.createBlock(ctx, tx, ownerID, deviceID, op, fields)
@@ -396,25 +396,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 	note.CurrentVersion++
 
 	switch op.OperationType {
-	case OperationUpdateNote:
-		if title, ok, err := getStringField(fields, "title"); err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		} else if ok {
-			note.Title = title
-		}
-		if metadata, ok, err := getObjectField(fields, "metadata"); err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		} else if ok {
-			note.Metadata = metadata
-		}
-		if categoryID, ok, err := getNullableUUIDField(fields, "categoryId"); err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		} else if ok {
-			note.CategoryID = categoryID
-		}
+
 	case OperationModifyNoteProperty:
 		if len(fields) == 0 {
 			rejected := rejectedInvalid(op, "modify_note_property must include at least one property.")
@@ -426,6 +408,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 			return nil, &rejected, nil
 		}
 		note.Metadata = metadata
+
 	case OperationModifyNoteTitle:
 		textChange, err := decodeTextChange(op.ChangeData, "changeData")
 		if err != nil {
@@ -439,21 +422,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 		}
 		note.Title = title
 	case OperationDeleteNote:
-		position, ok, err := getIntField(fields, "position")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		if !ok {
-			rejected := rejectedInvalid(op, "position is required.")
-			return nil, &rejected, nil
-		}
-		if position < 0 {
-			rejected := rejectedInvalid(op, "position must be greater than or equal to zero.")
-			return nil, &rejected, nil
-		}
-		// Deletion is soft: the row remains so tombstones can sync to offline
-		// devices.
+
 		note.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	}
 
@@ -516,42 +485,19 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
-	if blockSnapshot.ID != uuid.Nil && blockSnapshot.ID != *op.BlockID {
-		rejected := rejectedInvalid(op, "block.id must match blockId.")
-		return nil, &rejected, nil
-	}
-	if blockSnapshot.NoteID != uuid.Nil && blockSnapshot.NoteID != op.NoteID {
-		rejected := rejectedInvalid(op, "block.noteId must match noteId.")
-		return nil, &rejected, nil
-	}
+
 	blockType := blockSnapshot.BlockType
-	if blockType == "" {
-		blockType, _, err = getStringField(blockFields, "type")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-	}
-	if blockType == "" {
-		rejected := rejectedInvalid(op, "block.blockType is required.")
-		return nil, &rejected, nil
-	}
+
 	if err := validateBlockType(blockType); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
-	text, ok, err := getStringField(blockFields, "textContent")
+	text, ok, err := getStringField(blockFields, "text")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
-	if !ok {
-		text, _, err = getStringField(blockFields, "text")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-	}
+
 	properties, ok, err := getObjectField(blockFields, "properties")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -724,16 +670,16 @@ func decodeBlockSnapshot(raw json.RawMessage) (BlockSnapshot, map[string]json.Ra
 		return BlockSnapshot{}, nil, err
 	}
 	block := BlockSnapshot{}
-	if rawID, ok := fields["id"]; ok && !isJSONNull(rawID) {
-		if err := json.Unmarshal(rawID, &block.ID); err != nil {
-			return BlockSnapshot{}, nil, errors.New("block.id must be a UUID")
-		}
-	}
-	if rawNoteID, ok := fields["noteId"]; ok && !isJSONNull(rawNoteID) {
-		if err := json.Unmarshal(rawNoteID, &block.NoteID); err != nil {
-			return BlockSnapshot{}, nil, errors.New("block.noteId must be a UUID")
-		}
-	}
+	// if rawID, ok := fields["id"]; ok && !isJSONNull(rawID) {
+	// 	if err := json.Unmarshal(rawID, &block.ID); err != nil {
+	// 		return BlockSnapshot{}, nil, errors.New("block.id must be a UUID")
+	// 	}
+	// }
+	// if rawNoteID, ok := fields["noteId"]; ok && !isJSONNull(rawNoteID) {
+	// 	if err := json.Unmarshal(rawNoteID, &block.NoteID); err != nil {
+	// 		return BlockSnapshot{}, nil, errors.New("block.noteId must be a UUID")
+	// 	}
+	// }
 	blockType, _, err := getStringField(fields, "blockType")
 	if err != nil {
 		return BlockSnapshot{}, nil, err
