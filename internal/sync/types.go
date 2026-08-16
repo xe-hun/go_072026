@@ -96,8 +96,8 @@ type RejectedOperation struct {
 	ServerNoteVersion int64 `json:"serverNoteVersion,omitempty"`
 }
 
-// NoteSnapshot is the current note state returned once for a rejected note
-// batch so clients can reset conflict UI to the server-authoritative document.
+// NoteSnapshot contains the current note properties returned once for a
+// rejected note batch so clients can resolve the conflict.
 type NoteSnapshot struct {
 	ID             uuid.UUID       `json:"id"`
 	OwnerID        uuid.UUID       `json:"ownerId"`
@@ -107,20 +107,6 @@ type NoteSnapshot struct {
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
 	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
-	Blocks         []BlockSnapshot `json:"blocks"`
-}
-
-// BlockSnapshot is one block inside a current note snapshot.
-type BlockSnapshot struct {
-	ID          uuid.UUID       `json:"id"`
-	NoteID      uuid.UUID       `json:"noteId"`
-	BlockType   string          `json:"blockType"`
-	TextContent string          `json:"textContent"`
-	Position    string          `json:"position"`
-	Properties  json.RawMessage `json:"properties"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
-	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
 }
 
 // PulledChange is a change-log row sent to another device during pull sync.

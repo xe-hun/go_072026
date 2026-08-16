@@ -322,7 +322,7 @@ CREATE INDEX sync_devices_owner_idx
 CREATE TABLE note_changes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
-    note_id UUID NOT NULL REFERENCES notes(id),
+    note_id UUID REFERENCES notes(id),
     block_id UUID,
     device_id UUID NOT NULL REFERENCES sync_devices(id),
     client_operation_id UUID NOT NULL,
@@ -334,8 +334,7 @@ CREATE TABLE note_changes (
     change_data JSONB NOT NULL,
     global_sequence BIGINT GENERATED ALWAYS AS IDENTITY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (device_id, client_operation_id),
-    UNIQUE (note_id, resulting_note_version)
+    UNIQUE (device_id, client_operation_id)
 );
 
 CREATE INDEX note_changes_owner_sequence_idx
@@ -452,7 +451,7 @@ Maintain one note version per note.
 
 Rules:
 
-1. Every note-level or block-level mutation increments `notes.current_version`.
+1. Each successful note operation batch increments `notes.current_version` once; all accepted operations in that batch share the resulting version.
 2. Each accepted operation records its base and resulting note versions.
 3. The server is authoritative for resulting versions.
 4. Clients must send the note base version they edited.
@@ -543,8 +542,7 @@ Accept-Encoding: gzip
   "serverNoteVersion": 20,
   "noteSnapshot": {
     "id": "uuid",
-    "currentVersion": 20,
-    "blocks": []
+    "currentVersion": 20
   }
 }
 ```
@@ -570,7 +568,7 @@ For each sync request:
 11. Verify ownership through `owner_id`.
 12. Compare note base versions.
 13. Apply accepted changes to `notes` and `note_blocks`.
-14. Increment versions.
+14. Increment each changed note version once after its complete operation batch succeeds.
 15. Insert `note_changes` records.
 16. If one operation fails, roll back that note batch and return one rejected entry with the current note snapshot.
 17. Insert an outbox job if snapshot criteria are met.

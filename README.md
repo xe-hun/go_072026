@@ -90,7 +90,8 @@ The sync endpoint accepts a batch of note/block operations. Client operations
 include a per-note integer `sequence`; the server sorts by `noteId` and then
 `sequence`, applies each note as an atomic batch, and returns:
 
-- accepted note batches with authoritative note versions and global sequence
+- accepted note batches with one authoritative note version for the whole batch
+  and global sequence
 - rejected note batches with the current server note snapshot
 - pulled changes after the supplied cursor
 - the next cursor

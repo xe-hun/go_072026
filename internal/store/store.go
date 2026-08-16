@@ -46,7 +46,7 @@ type Note struct {
 	Title string
 	// Metadata contains optional JSONB note-level properties.
 	Metadata json.RawMessage
-	// CurrentVersion increments for every note or block mutation.
+	// CurrentVersion increments once for each successful note operation batch.
 	CurrentVersion int64
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
@@ -80,7 +80,7 @@ type NoteChange struct {
 	ID uuid.UUID
 	// OwnerID supports efficient per-user pull queries.
 	OwnerID uuid.UUID
-	// NoteID is the note affected by the operation.
+	// NoteID is the note affected by the operation. It is nil for category changes.
 	NoteID uuid.UUID
 	// BlockID is nullable for note-level operations.
 	BlockID pgtype.UUID

@@ -164,22 +164,24 @@ The service:
 5. Applies each note's operations as one savepoint-backed batch.
 6. Looks up `(device_id, operation_id)` to make retries idempotent.
 7. Validates operation type, block ID requirements, change format, and direct changeData shapes.
-8. Locks affected rows with `FOR UPDATE`, selecting only the version or property being changed.
-9. Compares client note base versions to server versions.
-10. Applies valid operations to current state.
+8. Locks and loads the complete note document once for each note batch.
+9. Compares client note base versions to the loaded server version.
+10. Applies valid operations in sequence to the in-memory document.
 11. Inserts exactly one `note_changes` row per accepted operation.
-12. Rolls back the whole note batch if any operation fails and returns one rejected item with the current note snapshot.
-13. Enqueues snapshot jobs when thresholds are reached.
-14. Pulls remote changes after the client cursor.
-15. Updates the device cursor and last seen timestamp.
-16. Commits the transaction.
-17. Returns accepted note batches, rejected note batches, pulled changes, next cursor, and pagination state.
+12. Rolls back the whole note batch if any operation fails and returns one rejected item with the current note properties.
+13. Saves the complete changed note document and increments its version once.
+14. Enqueues snapshot jobs when thresholds are reached.
+15. Pulls remote changes after the client cursor.
+16. Updates the device cursor and last seen timestamp.
+17. Commits the transaction.
+18. Returns accepted note batches, rejected note batches, pulled changes, next cursor, and pagination state.
 
 A valid sync request can have both accepted and rejected note batches. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
 
 ## Versioning
 
-Every mutation increments `notes.current_version`.
+Each successful note operation batch increments `notes.current_version` once; all
+accepted operations in that batch share the resulting version.
 
 The server is authoritative for resulting versions.
 

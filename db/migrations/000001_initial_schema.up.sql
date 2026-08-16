@@ -77,8 +77,7 @@ CREATE TABLE note_changes (
     change_data JSONB NOT NULL,
     global_sequence BIGINT GENERATED ALWAYS AS IDENTITY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (device_id, client_operation_id),
-    UNIQUE (note_id, resulting_note_version)
+    UNIQUE (device_id, client_operation_id)
 );
 
 CREATE INDEX note_changes_owner_sequence_idx

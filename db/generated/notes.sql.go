@@ -69,111 +69,6 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) error {
 	return err
 }
 
-const deleteBlock = `-- name: DeleteBlock :exec
-UPDATE note_blocks
-SET updated_at = now(),
-    deleted_at = now()
-WHERE id = $1
-  AND note_id = $2
-`
-
-type DeleteBlockParams struct {
-	ID     pgtype.UUID `json:"id"`
-	NoteID pgtype.UUID `json:"note_id"`
-}
-
-// Soft deletes a block.
-func (q *Queries) DeleteBlock(ctx context.Context, arg DeleteBlockParams) error {
-	_, err := q.db.Exec(ctx, deleteBlock, arg.ID, arg.NoteID)
-	return err
-}
-
-const deleteNote = `-- name: DeleteNote :exec
-UPDATE notes
-SET current_version = $3,
-    updated_at = now(),
-    deleted_at = now()
-WHERE id = $1
-  AND owner_id = $2
-`
-
-type DeleteNoteParams struct {
-	ID             pgtype.UUID `json:"id"`
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	CurrentVersion int64       `json:"current_version"`
-}
-
-// Soft deletes a note and updates only the fields needed by the operation.
-func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) error {
-	_, err := q.db.Exec(ctx, deleteNote, arg.ID, arg.OwnerID, arg.CurrentVersion)
-	return err
-}
-
-const getBlockForNoteForUpdate = `-- name: GetBlockForNoteForUpdate :one
-SELECT id
-FROM note_blocks
-WHERE id = $1
-  AND note_id = $2
-  AND position = $3
-FOR UPDATE
-`
-
-type GetBlockForNoteForUpdateParams struct {
-	ID       pgtype.UUID `json:"id"`
-	NoteID   pgtype.UUID `json:"note_id"`
-	Position string      `json:"position"`
-}
-
-// Reads and locks only the block identity for a delete.
-func (q *Queries) GetBlockForNoteForUpdate(ctx context.Context, arg GetBlockForNoteForUpdateParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getBlockForNoteForUpdate, arg.ID, arg.NoteID, arg.Position)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const getBlockPropertiesForUpdate = `-- name: GetBlockPropertiesForUpdate :one
-SELECT properties
-FROM note_blocks
-WHERE id = $1
-  AND note_id = $2
-FOR UPDATE
-`
-
-type GetBlockPropertiesForUpdateParams struct {
-	ID     pgtype.UUID `json:"id"`
-	NoteID pgtype.UUID `json:"note_id"`
-}
-
-// Reads only properties for a block property mutation.
-func (q *Queries) GetBlockPropertiesForUpdate(ctx context.Context, arg GetBlockPropertiesForUpdateParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getBlockPropertiesForUpdate, arg.ID, arg.NoteID)
-	var properties []byte
-	err := row.Scan(&properties)
-	return properties, err
-}
-
-const getBlockTextForUpdate = `-- name: GetBlockTextForUpdate :one
-SELECT text_content
-FROM note_blocks
-WHERE id = $1
-  AND note_id = $2
-FOR UPDATE
-`
-
-type GetBlockTextForUpdateParams struct {
-	ID     pgtype.UUID `json:"id"`
-	NoteID pgtype.UUID `json:"note_id"`
-}
-
-// Reads only text for a block text mutation.
-func (q *Queries) GetBlockTextForUpdate(ctx context.Context, arg GetBlockTextForUpdateParams) (string, error) {
-	row := q.db.QueryRow(ctx, getBlockTextForUpdate, arg.ID, arg.NoteID)
-	var text_content string
-	err := row.Scan(&text_content)
-	return text_content, err
-}
-
 const getNoteForOwner = `-- name: GetNoteForOwner :one
 SELECT id, owner_id, title, metadata, current_version, created_at, updated_at, deleted_at
 FROM notes
@@ -203,97 +98,34 @@ func (q *Queries) GetNoteForOwner(ctx context.Context, arg GetNoteForOwnerParams
 	return i, err
 }
 
-const getNoteMetadataForOwnerForUpdate = `-- name: GetNoteMetadataForOwnerForUpdate :one
-SELECT metadata, current_version
+const getNoteForOwnerForUpdate = `-- name: GetNoteForOwnerForUpdate :one
+SELECT id, owner_id, title, metadata, current_version, created_at, updated_at, deleted_at
 FROM notes
 WHERE id = $1
   AND owner_id = $2
 FOR UPDATE
 `
 
-type GetNoteMetadataForOwnerForUpdateParams struct {
+type GetNoteForOwnerForUpdateParams struct {
 	ID      pgtype.UUID `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-type GetNoteMetadataForOwnerForUpdateRow struct {
-	Metadata       []byte `json:"metadata"`
-	CurrentVersion int64  `json:"current_version"`
-}
-
-// Reads only metadata and the version for a metadata mutation.
-func (q *Queries) GetNoteMetadataForOwnerForUpdate(ctx context.Context, arg GetNoteMetadataForOwnerForUpdateParams) (GetNoteMetadataForOwnerForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getNoteMetadataForOwnerForUpdate, arg.ID, arg.OwnerID)
-	var i GetNoteMetadataForOwnerForUpdateRow
-	err := row.Scan(&i.Metadata, &i.CurrentVersion)
+// Reads and locks the complete note before applying a note batch.
+func (q *Queries) GetNoteForOwnerForUpdate(ctx context.Context, arg GetNoteForOwnerForUpdateParams) (Note, error) {
+	row := q.db.QueryRow(ctx, getNoteForOwnerForUpdate, arg.ID, arg.OwnerID)
+	var i Note
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Title,
+		&i.Metadata,
+		&i.CurrentVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
 	return i, err
-}
-
-const getNoteTitleForOwnerForUpdate = `-- name: GetNoteTitleForOwnerForUpdate :one
-SELECT title, current_version
-FROM notes
-WHERE id = $1
-  AND owner_id = $2
-FOR UPDATE
-`
-
-type GetNoteTitleForOwnerForUpdateParams struct {
-	ID      pgtype.UUID `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
-}
-
-type GetNoteTitleForOwnerForUpdateRow struct {
-	Title          string `json:"title"`
-	CurrentVersion int64  `json:"current_version"`
-}
-
-// Reads only the title and version for a title mutation.
-func (q *Queries) GetNoteTitleForOwnerForUpdate(ctx context.Context, arg GetNoteTitleForOwnerForUpdateParams) (GetNoteTitleForOwnerForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getNoteTitleForOwnerForUpdate, arg.ID, arg.OwnerID)
-	var i GetNoteTitleForOwnerForUpdateRow
-	err := row.Scan(&i.Title, &i.CurrentVersion)
-	return i, err
-}
-
-const getNoteVersionForOwnerForUpdate = `-- name: GetNoteVersionForOwnerForUpdate :one
-SELECT current_version
-FROM notes
-WHERE id = $1
-  AND owner_id = $2
-FOR UPDATE
-`
-
-type GetNoteVersionForOwnerForUpdateParams struct {
-	ID      pgtype.UUID `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
-}
-
-// Reads and locks only the note version before a mutation.
-func (q *Queries) GetNoteVersionForOwnerForUpdate(ctx context.Context, arg GetNoteVersionForOwnerForUpdateParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getNoteVersionForOwnerForUpdate, arg.ID, arg.OwnerID)
-	var current_version int64
-	err := row.Scan(&current_version)
-	return current_version, err
-}
-
-const incrementNoteVersion = `-- name: IncrementNoteVersion :exec
-UPDATE notes
-SET current_version = $3,
-    updated_at = now()
-WHERE id = $1
-  AND owner_id = $2
-`
-
-type IncrementNoteVersionParams struct {
-	ID             pgtype.UUID `json:"id"`
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	CurrentVersion int64       `json:"current_version"`
-}
-
-// Increments the parent note version without loading its other columns.
-func (q *Queries) IncrementNoteVersion(ctx context.Context, arg IncrementNoteVersionParams) error {
-	_, err := q.db.Exec(ctx, incrementNoteVersion, arg.ID, arg.OwnerID, arg.CurrentVersion)
-	return err
 }
 
 const listBlocksForNote = `-- name: ListBlocksForNote :many
@@ -334,96 +166,71 @@ func (q *Queries) ListBlocksForNote(ctx context.Context, noteID pgtype.UUID) ([]
 	return items, nil
 }
 
-const updateBlockProperties = `-- name: UpdateBlockProperties :exec
+const updateBlockState = `-- name: UpdateBlockState :exec
 UPDATE note_blocks
-SET properties = $3,
-    updated_at = now()
+SET block_type = $3,
+    text_content = $4,
+    position = $5,
+    properties = $6,
+    updated_at = now(),
+    deleted_at = $7
 WHERE id = $1
   AND note_id = $2
 `
 
-type UpdateBlockPropertiesParams struct {
-	ID         pgtype.UUID `json:"id"`
-	NoteID     pgtype.UUID `json:"note_id"`
-	Properties []byte      `json:"properties"`
+type UpdateBlockStateParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	NoteID      pgtype.UUID        `json:"note_id"`
+	BlockType   string             `json:"block_type"`
+	TextContent string             `json:"text_content"`
+	Position    string             `json:"position"`
+	Properties  []byte             `json:"properties"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
-// Updates only block properties.
-func (q *Queries) UpdateBlockProperties(ctx context.Context, arg UpdateBlockPropertiesParams) error {
-	_, err := q.db.Exec(ctx, updateBlockProperties, arg.ID, arg.NoteID, arg.Properties)
-	return err
-}
-
-const updateBlockText = `-- name: UpdateBlockText :exec
-UPDATE note_blocks
-SET text_content = $3,
-    updated_at = now()
-WHERE id = $1
-  AND note_id = $2
-`
-
-type UpdateBlockTextParams struct {
-	ID          pgtype.UUID `json:"id"`
-	NoteID      pgtype.UUID `json:"note_id"`
-	TextContent string      `json:"text_content"`
-}
-
-// Updates only block text.
-func (q *Queries) UpdateBlockText(ctx context.Context, arg UpdateBlockTextParams) error {
-	_, err := q.db.Exec(ctx, updateBlockText, arg.ID, arg.NoteID, arg.TextContent)
-	return err
-}
-
-const updateNoteMetadata = `-- name: UpdateNoteMetadata :exec
-UPDATE notes
-SET metadata = $3,
-    current_version = $4,
-    updated_at = now()
-WHERE id = $1
-  AND owner_id = $2
-`
-
-type UpdateNoteMetadataParams struct {
-	ID             pgtype.UUID `json:"id"`
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	Metadata       []byte      `json:"metadata"`
-	CurrentVersion int64       `json:"current_version"`
-}
-
-// Updates only note metadata and the already-validated version.
-func (q *Queries) UpdateNoteMetadata(ctx context.Context, arg UpdateNoteMetadataParams) error {
-	_, err := q.db.Exec(ctx, updateNoteMetadata,
+// Writes complete block state after a successful operation batch.
+func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStateParams) error {
+	_, err := q.db.Exec(ctx, updateBlockState,
 		arg.ID,
-		arg.OwnerID,
-		arg.Metadata,
-		arg.CurrentVersion,
+		arg.NoteID,
+		arg.BlockType,
+		arg.TextContent,
+		arg.Position,
+		arg.Properties,
+		arg.DeletedAt,
 	)
 	return err
 }
 
-const updateNoteTitle = `-- name: UpdateNoteTitle :exec
+const updateNoteState = `-- name: UpdateNoteState :exec
 UPDATE notes
 SET title = $3,
-    current_version = $4,
-    updated_at = now()
+    metadata = $4,
+    current_version = $5,
+    updated_at = now(),
+    deleted_at = $6
 WHERE id = $1
   AND owner_id = $2
 `
 
-type UpdateNoteTitleParams struct {
-	ID             pgtype.UUID `json:"id"`
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	Title          string      `json:"title"`
-	CurrentVersion int64       `json:"current_version"`
+type UpdateNoteStateParams struct {
+	ID             pgtype.UUID        `json:"id"`
+	OwnerID        pgtype.UUID        `json:"owner_id"`
+	Title          string             `json:"title"`
+	Metadata       []byte             `json:"metadata"`
+	CurrentVersion int64              `json:"current_version"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
-// Updates only note title and the already-validated version.
-func (q *Queries) UpdateNoteTitle(ctx context.Context, arg UpdateNoteTitleParams) error {
-	_, err := q.db.Exec(ctx, updateNoteTitle,
+// Writes the complete note state after a successful operation batch.
+func (q *Queries) UpdateNoteState(ctx context.Context, arg UpdateNoteStateParams) error {
+	_, err := q.db.Exec(ctx, updateNoteState,
 		arg.ID,
 		arg.OwnerID,
 		arg.Title,
+		arg.Metadata,
 		arg.CurrentVersion,
+		arg.DeletedAt,
 	)
 	return err
 }
