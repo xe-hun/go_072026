@@ -52,9 +52,9 @@ type ClientOperation struct {
 // individual operations are rejected.
 type Response struct {
 	// Accepted lists operations that mutated state or were idempotent replays.
-	Accepted []AcceptedOperation `json:"accepted"`
+	Accepted []AcceptedDTO `json:"accepted"`
 	// Rejected lists per-operation validation/conflict failures.
-	Rejected []RejectedOperation `json:"rejected"`
+	Rejected []RejectedDTO `json:"rejected"`
 	// Changes contains remote changes after the supplied cursor.
 	Changes []PulledChange `json:"changes"`
 	// NextCursor is the cursor the client should store after applying this
@@ -68,35 +68,25 @@ type Response struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// AcceptedOperation reports authoritative versions/sequences for an accepted
-// note batch.
-type AcceptedOperation struct {
-	OperationID  uuid.UUID   `json:"operationId"`
-	OperationIDs []uuid.UUID `json:"operationIds,omitempty"`
-	NoteID       uuid.UUID   `json:"noteId"`
-	BlockID      *uuid.UUID  `json:"blockId,omitempty"`
-	// NoteVersion is the resulting note version.
-	NoteVersion int64 `json:"noteVersion"`
-	// Sequence is the global change sequence assigned by PostgreSQL.
-	Sequence int64 `json:"sequence"`
+// AcceptedDTO reports the resulting version for an accepted note batch.
+type AcceptedDTO struct {
+	NoteID            uuid.UUID `json:"noteId"`
+	ServerNoteVersion int64     `json:"serverNoteVersion"`
 }
 
-// RejectedOperation reports why one note batch in an otherwise valid sync
-// request could not be applied.
-type RejectedOperation struct {
-	OperationID  uuid.UUID     `json:"operationId"`
-	OperationIDs []uuid.UUID   `json:"operationIds,omitempty"`
+// RejectedDTO reports why one note batch in an otherwise valid sync request
+// could not be applied.
+type RejectedDTO struct {
 	Code         string        `json:"code"`
 	Message      string        `json:"message,omitempty"`
 	NoteID       uuid.UUID     `json:"noteId,omitempty"`
-	BlockID      *uuid.UUID    `json:"blockId,omitempty"`
 	NoteSnapshot *NoteSnapshot `json:"noteSnapshot,omitempty"`
 	// Client/server versions are included for conflict resolution UI.
 	ClientNoteVersion int64 `json:"clientNoteVersion,omitempty"`
 	ServerNoteVersion int64 `json:"serverNoteVersion,omitempty"`
 }
 
-// NoteSnapshot contains the current note properties returned once for a
+// NoteSnapshot contains the current note and block state returned once for a
 // rejected note batch so clients can resolve the conflict.
 type NoteSnapshot struct {
 	ID             uuid.UUID       `json:"id"`
@@ -107,6 +97,20 @@ type NoteSnapshot struct {
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
 	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
+	Blocks         []BlockSnapshot `json:"blocks"`
+}
+
+// BlockSnapshot is one block inside a current note snapshot.
+type BlockSnapshot struct {
+	ID          uuid.UUID       `json:"id"`
+	NoteID      uuid.UUID       `json:"noteId"`
+	BlockType   string          `json:"blockType"`
+	TextContent string          `json:"textContent"`
+	Position    string          `json:"position"`
+	Properties  json.RawMessage `json:"properties"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
 }
 
 // PulledChange is a change-log row sent to another device during pull sync.

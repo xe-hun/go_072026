@@ -515,16 +515,13 @@ Accept-Encoding: gzip
 {
   "accepted": [
     {
-      "operationId": "uuid",
-      "operationIds": ["uuid"],
       "noteId": "uuid",
-      "noteVersion": 18,
-      "sequence": 8153
+      "serverNoteVersion": 18
     }
   ],
   "rejected": [],
   "changes": [],
-  "nextCursor": 8153,
+  "nextCursor": 0,
   "hasMore": false,
   "resyncRequired": false
 }
@@ -534,15 +531,15 @@ Accept-Encoding: gzip
 
 ```json
 {
-  "operationId": "uuid",
   "code": "BASE_VERSION_CONFLICT",
+  "message": "The note version is out of date.",
   "noteId": "uuid",
-  "blockId": "uuid",
   "clientNoteVersion": 17,
   "serverNoteVersion": 20,
   "noteSnapshot": {
     "id": "uuid",
-    "currentVersion": 20
+    "currentVersion": 20,
+    "blocks": []
   }
 }
 ```

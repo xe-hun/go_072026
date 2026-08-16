@@ -80,8 +80,8 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 	}
 
 	resp := Response{
-		Accepted:   []AcceptedOperation{},
-		Rejected:   []RejectedOperation{},
+		Accepted:   []AcceptedDTO{},
+		Rejected:   []RejectedDTO{},
 		Changes:    []PulledChange{},
 		NextCursor: req.Cursor,
 	}
@@ -138,7 +138,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 
 		// Cursor update is committed with the same transaction as operation
 		// application and pull calculation.
-		resp.NextCursor = nextCursor(req.Cursor, resp.Accepted, resp.Changes, resp.HasMore)
+		resp.NextCursor = nextCursor(req.Cursor, resp.Changes, resp.HasMore)
 		return tx.UpdateDeviceCursor(ctx, req.DeviceID, ownerID, resp.NextCursor)
 	})
 	if err != nil {
@@ -172,7 +172,7 @@ func sortedOperations(operations []ClientOperation) []ClientOperation {
 // applyOperationBatch applies all operations for one note under a savepoint. A
 // single rejected operation rolls back the whole note batch and returns one
 // rejection entry with the current server note snapshot.
-func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, operations []ClientOperation) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, operations []ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	if len(operations) == 0 {
 		return nil, nil, nil
 	}
@@ -191,32 +191,29 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 	}
 	originalDocument := cloneNoteDocument(document)
 
-	acceptedItems := make([]AcceptedOperation, 0, len(operations))
-	var failed RejectedOperation
+	var failed RejectedDTO
 	changed := false
+
 	err := tx.WithSavepoint(ctx, func(batchTx *store.Store) error {
 		for _, op := range operations {
-			var accepted *AcceptedOperation
-			var rejected *RejectedOperation
+			var rejected *RejectedDTO
 			var operationChanged bool
 			var err error
-			document, accepted, rejected, operationChanged, err = s.applyOperation(ctx, batchTx, ownerID, deviceID, document, op)
+			document, _, rejected, operationChanged, err = s.applyOperation(ctx, batchTx, ownerID, deviceID, document, op)
 			if err != nil {
 				return err
 			}
 			changed = changed || operationChanged
+
 			if rejected != nil {
 				failed = *rejected
 				return errOperationBatchRejected
-			}
-			if accepted != nil {
-				acceptedItems = append(acceptedItems, *accepted)
 			}
 		}
 		return nil
 	})
 	if errors.Is(err, errOperationBatchRejected) {
-		rejected := rejectedOperationBatch(operations, failed, originalDocument)
+		rejected := rejectedBatchDTO(operations, failed, originalDocument)
 		return nil, &rejected, nil
 	}
 	if err != nil {
@@ -236,42 +233,14 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 	if document != nil {
 		noteVersion = document.Note.CurrentVersion
 	}
-	accepted := acceptedOperationBatch(operations, acceptedItems, noteVersion)
+	accepted := AcceptedDTO{
+		NoteID:            operations[0].NoteID,
+		ServerNoteVersion: noteVersion,
+	}
 	return &accepted, nil, nil
 }
-
-func acceptedOperationBatch(operations []ClientOperation, acceptedItems []AcceptedOperation, noteVersion int64) AcceptedOperation {
-	if len(acceptedItems) == 0 {
-		return AcceptedOperation{
-			OperationIDs: operationIDs(operations),
-			NoteID:       operations[0].NoteID,
-		}
-	}
-	if operations[0].NoteID == uuid.Nil {
-		return AcceptedOperation{
-			OperationID:  acceptedItems[len(acceptedItems)-1].OperationID,
-			OperationIDs: operationIDs(operations),
-			Sequence:     maxAcceptedSequence(acceptedItems),
-		}
-	}
-
-	last := acceptedItems[len(acceptedItems)-1]
-	accepted := AcceptedOperation{
-		OperationID:  last.OperationID,
-		OperationIDs: operationIDs(operations),
-		NoteID:       operations[0].NoteID,
-		NoteVersion:  noteVersion,
-		Sequence:     maxAcceptedSequence(acceptedItems),
-	}
-	if len(acceptedItems) == 1 {
-		accepted.BlockID = last.BlockID
-	}
-	return accepted
-}
-
-func rejectedOperationBatch(operations []ClientOperation, failed RejectedOperation, document *store.NoteDocument) RejectedOperation {
+func rejectedBatchDTO(operations []ClientOperation, failed RejectedDTO, document *store.NoteDocument) RejectedDTO {
 	rejected := failed
-	rejected.OperationIDs = operationIDs(operations)
 	rejected.NoteID = operations[0].NoteID
 	if operations[0].NoteID == uuid.Nil {
 		return rejected
@@ -301,28 +270,10 @@ func cloneNoteDocument(document *store.NoteDocument) *store.NoteDocument {
 	return &clone
 }
 
-func operationIDs(operations []ClientOperation) []uuid.UUID {
-	ids := make([]uuid.UUID, 0, len(operations))
-	for _, op := range operations {
-		ids = append(ids, op.OperationID)
-	}
-	return ids
-}
-
-func maxAcceptedSequence(items []AcceptedOperation) int64 {
-	var sequence int64
-	for _, item := range items {
-		if item.Sequence > sequence {
-			sequence = item.Sequence
-		}
-	}
-	return sequence
-}
-
 // applyOperation handles one operation from a sync batch. It first checks the
 // idempotency table, then validates shape and dispatches to the concrete
 // operation implementation.
-func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation) (*store.NoteDocument, *AcceptedOperation, *RejectedOperation, bool, error) {
+func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation) (*store.NoteDocument, *AcceptedDTO, *RejectedDTO, bool, error) {
 	if processed, err := tx.FindProcessedOperation(ctx, deviceID, op.OperationID); err == nil {
 		// A retry returns the original accepted result and does not mutate state
 		// again.
@@ -388,7 +339,7 @@ func categoryIDAndName(fields map[string]json.RawMessage, requireName bool) (uui
 	return id, name, nil
 }
 
-func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
 	id, name, err := categoryIDAndName(fields, true)
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -405,7 +356,7 @@ func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, 
 	return &accepted, nil, nil
 }
 
-func (s *Service) mutateCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) mutateCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
 	id, name, err := categoryIDAndName(fields, op.OperationType == OperationModifyCategory)
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -436,7 +387,7 @@ func (s *Service) mutateCategory(ctx context.Context, tx *store.Store, ownerID, 
 
 // createNote applies create_note. A new note must be based on version 0 and
 // results in note version 1.
-func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*store.NoteDocument, *AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*store.NoteDocument, *AcceptedDTO, *RejectedDTO, error) {
 	if op.BaseNoteVersion != 0 {
 		rejected := rejectedConflict(op, 0)
 		return document, nil, &rejected, nil
@@ -477,7 +428,7 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 }
 
 // mutateNote applies update/delete operations for existing notes.
-func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
 	if document == nil {
 		rejected := rejectedNotFound(op, "Note not found.")
 		return nil, &rejected, nil
@@ -546,7 +497,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 	return nil, nil, errors.New("unsupported note operation")
 }
 
-func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, blockID *uuid.UUID) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, blockID *uuid.UUID) (*AcceptedDTO, *RejectedDTO, error) {
 	baseVersion := document.Note.CurrentVersion
 	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, &op.NoteID, blockID, baseVersion, baseVersion+1)
 	if err != nil {
@@ -557,7 +508,7 @@ func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ow
 }
 
 // createBlock applies create_block to the in-memory note document.
-func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
 	position, ok, err := getIntField(fields, "position")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -639,7 +590,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 }
 
 // mutateBlock applies update/delete operations to the in-memory note document.
-func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
 	var (
 		changedProperties map[string]json.RawMessage
 		textChange        TextChange
@@ -825,13 +776,10 @@ func (s *Service) enqueueSnapshotIfNeeded(ctx context.Context, tx *store.Store, 
 
 // acceptedFromChange maps a stored change to the accepted response shape. It is
 // used for both first-time accepts and idempotent retries.
-func acceptedFromChange(change store.NoteChange) AcceptedOperation {
-	return AcceptedOperation{
-		OperationID: change.ClientOperationID,
-		NoteID:      change.NoteID,
-		BlockID:     store.UUIDPtr(change.BlockID),
-		NoteVersion: change.ResultingNoteVersion,
-		Sequence:    change.GlobalSequence,
+func acceptedFromChange(change store.NoteChange) AcceptedDTO {
+	return AcceptedDTO{
+		NoteID:            change.NoteID,
+		ServerNoteVersion: change.ResultingNoteVersion,
 	}
 }
 
@@ -856,6 +804,20 @@ func mapPulledChange(change store.NoteChange) PulledChange {
 
 // mapNoteSnapshot maps current note state into the sync rejection payload.
 func mapNoteSnapshot(doc store.NoteDocument) NoteSnapshot {
+	blocks := make([]BlockSnapshot, 0, len(doc.Blocks))
+	for _, block := range doc.Blocks {
+		blocks = append(blocks, BlockSnapshot{
+			ID:          block.ID,
+			NoteID:      block.NoteID,
+			BlockType:   block.BlockType,
+			TextContent: block.TextContent,
+			Position:    block.Position,
+			Properties:  store.NormalizeJSON(block.Properties),
+			CreatedAt:   block.CreatedAt,
+			UpdatedAt:   block.UpdatedAt,
+			DeletedAt:   store.TimePtr(block.DeletedAt),
+		})
+	}
 	return NoteSnapshot{
 		ID:             doc.Note.ID,
 		OwnerID:        doc.Note.OwnerID,
@@ -865,22 +827,18 @@ func mapNoteSnapshot(doc store.NoteDocument) NoteSnapshot {
 		CreatedAt:      doc.Note.CreatedAt,
 		UpdatedAt:      doc.Note.UpdatedAt,
 		DeletedAt:      store.TimePtr(doc.Note.DeletedAt),
+		Blocks:         blocks,
 	}
 }
 
 // nextCursor calculates the cursor the client should persist after this
 // response. When a pull page has more rows, the cursor must stop at the last
 // returned pulled change so the next page is not skipped.
-func nextCursor(start int64, accepted []AcceptedOperation, changes []PulledChange, hasMore bool) int64 {
+func nextCursor(start int64, changes []PulledChange, hasMore bool) int64 {
 	if hasMore && len(changes) > 0 {
 		return changes[len(changes)-1].Sequence
 	}
 	next := start
-	for _, item := range accepted {
-		if item.Sequence > next {
-			next = item.Sequence
-		}
-	}
 	for _, change := range changes {
 		if change.Sequence > next {
 			next = change.Sequence

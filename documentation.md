@@ -168,13 +168,13 @@ The service:
 9. Compares client note base versions to the loaded server version.
 10. Applies valid operations in sequence to the in-memory document.
 11. Inserts exactly one `note_changes` row per accepted operation.
-12. Rolls back the whole note batch if any operation fails and returns one rejected item with the current note properties.
+12. Rolls back the whole note batch if any operation fails and returns one rejected DTO with the current note snapshot, including blocks.
 13. Saves the complete changed note document and increments its version once.
 14. Enqueues snapshot jobs when thresholds are reached.
 15. Pulls remote changes after the client cursor.
 16. Updates the device cursor and last seen timestamp.
 17. Commits the transaction.
-18. Returns accepted note batches, rejected note batches, pulled changes, next cursor, and pagination state.
+18. Returns accepted and rejected DTOs, pulled changes, next cursor, and pagination state.
 
 A valid sync request can have both accepted and rejected note batches. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
 

@@ -101,22 +101,20 @@ func TestDecodeTextChangeRequiresDirectShape(t *testing.T) {
 // TestNextCursorUsesLastPulledChangeWhenHasMore prevents pagination gaps when a
 // response is only one page of a larger pull result.
 func TestNextCursorUsesLastPulledChangeWhenHasMore(t *testing.T) {
-	accepted := []AcceptedOperation{{Sequence: 50}}
 	changes := []PulledChange{{Sequence: 11}, {Sequence: 12}}
-	got := nextCursor(10, accepted, changes, true)
+	got := nextCursor(10, changes, true)
 	if got != 12 {
 		t.Fatalf("next cursor = %d, want 12", got)
 	}
 }
 
-// TestNextCursorIncludesAcceptedSequenceWhenPullIsExhausted allows the cursor to
-// advance past locally accepted operations when no pull page remains.
-func TestNextCursorIncludesAcceptedSequenceWhenPullIsExhausted(t *testing.T) {
-	accepted := []AcceptedOperation{{Sequence: 50}}
+// TestNextCursorIncludesPulledSequenceWhenPullIsExhausted advances the cursor
+// through changes returned in the response.
+func TestNextCursorIncludesPulledSequenceWhenPullIsExhausted(t *testing.T) {
 	changes := []PulledChange{{Sequence: 11}, {Sequence: 12}}
-	got := nextCursor(10, accepted, changes, false)
-	if got != 50 {
-		t.Fatalf("next cursor = %d, want 50", got)
+	got := nextCursor(10, changes, false)
+	if got != 12 {
+		t.Fatalf("next cursor = %d, want 12", got)
 	}
 }
 
