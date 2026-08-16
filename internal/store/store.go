@@ -42,8 +42,6 @@ type Note struct {
 	ID uuid.UUID
 	// OwnerID scopes every read/write to the authenticated user.
 	OwnerID uuid.UUID
-	// CategoryID is nullable.
-	CategoryID pgtype.UUID
 	// Title is a frequently queried/displayed normal column.
 	Title string
 	// Metadata contains optional JSONB note-level properties.
@@ -90,7 +88,7 @@ type NoteChange struct {
 	DeviceID uuid.UUID
 	// ClientOperationID is the stable operation UUID used for idempotency.
 	ClientOperationID uuid.UUID
-	// OperationType is the concrete operation, for example update_block.
+	// OperationType is the concrete operation, for example modify_block_property.
 	OperationType string
 	// BaseNoteVersion is the client version before the operation.
 	BaseNoteVersion int64
@@ -169,7 +167,7 @@ type CreateDeviceParams struct {
 type InsertNoteChangeParams struct {
 	ID                uuid.UUID
 	OwnerID           uuid.UUID
-	NoteID            uuid.UUID
+	NoteID            *uuid.UUID
 	BlockID           *uuid.UUID
 	DeviceID          uuid.UUID
 	ClientOperationID uuid.UUID

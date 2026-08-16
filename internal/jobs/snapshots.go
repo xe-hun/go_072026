@@ -32,8 +32,6 @@ type SnapshotNote struct {
 	ID uuid.UUID `json:"id"`
 	// Title is the note title at snapshot time.
 	Title string `json:"title"`
-	// CategoryID is optional.
-	CategoryID *uuid.UUID `json:"categoryId"`
 	// Metadata stores note-level JSONB data.
 	Metadata json.RawMessage `json:"metadata"`
 	// Version is the note version represented by this snapshot.
@@ -107,12 +105,11 @@ func BuildSnapshotDocument(doc store.NoteDocument) SnapshotDocument {
 	return SnapshotDocument{
 		SchemaVersion: 1,
 		Note: SnapshotNote{
-			ID:         doc.Note.ID,
-			Title:      doc.Note.Title,
-			CategoryID: store.UUIDPtr(doc.Note.CategoryID),
-			Metadata:   store.NormalizeJSON(doc.Note.Metadata),
-			Version:    doc.Note.CurrentVersion,
-			DeletedAt:  deletedAt,
+			ID:        doc.Note.ID,
+			Title:     doc.Note.Title,
+			Metadata:  store.NormalizeJSON(doc.Note.Metadata),
+			Version:   doc.Note.CurrentVersion,
+			DeletedAt: deletedAt,
 		},
 		Blocks: blocks,
 	}

@@ -13,7 +13,7 @@ func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
 	op := ClientOperation{
 		OperationID:   uuid.New(),
 		NoteID:        uuid.New(),
-		OperationType: OperationUpdateBlock,
+		OperationType: OperationModifyBlockProperty,
 	}
 	if err := validateOperationShape(op); err == nil {
 		t.Fatal("expected missing blockId to fail validation")
@@ -24,15 +24,34 @@ func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
 // operation names used by the direct changeData payloads.
 func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {
 	blockID := uuid.New()
+	categoryOperations := []string{OperationCreateCategory, OperationDeleteCategory, OperationModifyCategory}
+	for _, operationType := range categoryOperations {
+		if err := validateOperationShape(ClientOperation{
+			OperationID:   uuid.New(),
+			OperationType: operationType,
+		}); err != nil {
+			t.Fatalf("expected %s to pass validation: %v", operationType, err)
+		}
+	}
 	ops := []ClientOperation{
 		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyNoteProperty},
-		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: "ModifyNoteTitle"},
-		{OperationID: uuid.New(), NoteID: uuid.New(), BlockID: &blockID, OperationType: "ModifyBlockProperty"},
+		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyNoteTitle},
+		{OperationID: uuid.New(), NoteID: uuid.New(), BlockID: &blockID, OperationType: OperationModifyBlockProperty},
 	}
 	for _, op := range ops {
 		if err := validateOperationShape(op); err != nil {
 			t.Fatalf("expected %s to pass validation: %v", op.OperationType, err)
 		}
+	}
+}
+
+func TestValidateOperationShapeRejectsNoteIDForCategory(t *testing.T) {
+	if err := validateOperationShape(ClientOperation{
+		OperationID:   uuid.New(),
+		NoteID:        uuid.New(),
+		OperationType: OperationCreateCategory,
+	}); err == nil {
+		t.Fatal("expected category operation with noteId to fail validation")
 	}
 }
 
@@ -67,8 +86,8 @@ func TestDecodeChangeObjectRejectsNonObject(t *testing.T) {
 	}
 }
 
-// TestDecodeTextChangeRequiresDirectShape verifies the title/block text delta
-// object expected by modify_note_title and update_block.
+// TestDecodeTextChangeRequiresDirectShape verifies the text delta object
+// expected by modify_note_title and modify_block_property.
 func TestDecodeTextChangeRequiresDirectShape(t *testing.T) {
 	change, err := decodeTextChange(json.RawMessage(`{"textOperation":"insert","index":1,"text":"e"}`), "changeData")
 	if err != nil {
@@ -113,7 +132,7 @@ func TestValidateBlockType(t *testing.T) {
 	}
 }
 
-// TestApplyTextDeltaInsertAndDelete verifies the update_block delta semantics.
+// TestApplyTextDeltaInsertAndDelete verifies text delta semantics.
 func TestApplyTextDeltaInsertAndDelete(t *testing.T) {
 	inserted, err := applyTextDelta("helo", "l", TextOperationInsert, 2)
 	if err != nil {

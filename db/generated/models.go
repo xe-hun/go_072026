@@ -20,7 +20,6 @@ type Category struct {
 type Note struct {
 	ID             pgtype.UUID        `json:"id"`
 	OwnerID        pgtype.UUID        `json:"owner_id"`
-	CategoryID     pgtype.UUID        `json:"category_id"`
 	Title          string             `json:"title"`
 	Metadata       []byte             `json:"metadata"`
 	CurrentVersion int64              `json:"current_version"`

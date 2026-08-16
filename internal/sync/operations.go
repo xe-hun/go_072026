@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
@@ -20,9 +19,13 @@ const (
 
 	// Block operation names.
 	OperationCreateBlock         = "create_block"
-	OperationUpdateBlock         = "update_block"
 	OperationDeleteBlock         = "delete_block"
 	OperationModifyBlockProperty = "modify_block_property"
+
+	// Category operation names.
+	OperationCreateCategory = "create_category"
+	OperationDeleteCategory = "delete_category"
+	OperationModifyCategory = "modify_category"
 
 	// Text operation names accepted by title/block text deltas.
 	TextOperationInsert = "insert"
@@ -44,7 +47,7 @@ var allowedBlockTypes = map[string]struct{}{
 }
 
 // TextChange is the direct text delta shape used by modify_note_title and the
-// nested update_block.textDelta payload.
+// nested modify_block_property.textDelta payload.
 type TextChange struct {
 	TextOperation string
 	Index         int
@@ -59,32 +62,7 @@ func normalizeChangeFormat(format string) string {
 	return format
 }
 
-// normalizeOperationType accepts the client enum-style names while storing and
-// dispatching through the existing snake_case operation names.
-func normalizeOperationType(operationType string) string {
-	switch operationType {
-	case "CreateNote":
-		return OperationCreateNote
-	case "DeleteNote":
-		return OperationDeleteNote
-	case "ModifyNoteProperty":
-		return OperationModifyNoteProperty
-	case "ModifyNoteTitle":
-		return OperationModifyNoteTitle
-	case "CreateBlock":
-		return OperationCreateBlock
-	case "UpdateBlock":
-		return OperationUpdateBlock
-	case "DeleteBlock":
-		return OperationDeleteBlock
-	case "ModifyBlockProperty":
-		return OperationModifyBlockProperty
-	default:
-		return operationType
-	}
-}
-
-// // decodeChangeObject extracts the direct object payload from changeData.
+// decodeChangeObject extracts the direct object payload from changeData.
 func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]json.RawMessage{}, nil
@@ -95,6 +73,9 @@ func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error)
 // decodeObjectFields validates and decodes a JSON object into raw field values.
 func decodeObjectFields(raw json.RawMessage, name string) (map[string]json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil, fmt.Errorf("%s must be an object", name)
+	}
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(trimmed, &fields); err != nil {
@@ -155,31 +136,20 @@ func getObjectField(fields map[string]json.RawMessage, key string) (json.RawMess
 	return json.RawMessage(trimmed), true, nil
 }
 
-// getNullableObjectFields reads an optional object field. A JSON null value is
-// treated the same as omission for operation fields documented as nullable.
-func getNullableObjectFields(fields map[string]json.RawMessage, key string) (map[string]json.RawMessage, bool, error) {
-	raw, ok := fields[key]
-	if !ok || isJSONNull(raw) {
-		return nil, false, nil
-	}
-	value, err := decodeObjectFields(raw, key)
-	return value, true, err
-}
-
-// getNullableUUIDField reads an optional UUID field that can explicitly be null.
-func getNullableUUIDField(fields map[string]json.RawMessage, key string) (pgtype.UUID, bool, error) {
+// getUUIDField reads a required UUID field.
+func getUUIDField(fields map[string]json.RawMessage, key string) (uuid.UUID, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
-		return pgtype.UUID{}, false, nil
+		return uuid.Nil, false, nil
 	}
 	if isJSONNull(raw) {
-		return pgtype.UUID{}, true, nil
+		return uuid.Nil, true, fmt.Errorf("%s must be a UUID", key)
 	}
 	var id uuid.UUID
 	if err := json.Unmarshal(raw, &id); err != nil {
-		return pgtype.UUID{}, true, fmt.Errorf("%s must be a UUID or null", key)
+		return uuid.Nil, true, fmt.Errorf("%s must be a UUID", key)
 	}
-	return pgtype.UUID{Bytes: id, Valid: true}, true, nil
+	return id, true, nil
 }
 
 // decodeTextChange decodes a full text operation object.
@@ -216,16 +186,6 @@ func decodeTextChange(raw json.RawMessage, name string) (TextChange, error) {
 	}, nil
 }
 
-// getNullableTextChangeField reads an optional nested text operation object.
-func getNullableTextChangeField(fields map[string]json.RawMessage, key string) (TextChange, bool, error) {
-	raw, ok := fields[key]
-	if !ok || isJSONNull(raw) {
-		return TextChange{}, false, nil
-	}
-	value, err := decodeTextChange(raw, key)
-	return value, true, err
-}
-
 func isJSONNull(raw json.RawMessage) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
@@ -236,15 +196,22 @@ func validateOperationShape(op ClientOperation) error {
 	if op.OperationID == uuid.Nil {
 		return errors.New("operationId is required")
 	}
-	if op.NoteID == uuid.Nil {
-		return errors.New("noteId is required")
-	}
 	if op.Sequence < 0 {
 		return errors.New("sequence must be greater than or equal to zero")
 	}
-	switch normalizeOperationType(op.OperationType) {
+	switch op.OperationType {
+	case OperationCreateCategory, OperationDeleteCategory, OperationModifyCategory:
+		if op.NoteID != uuid.Nil {
+			return errors.New("noteId is not allowed for category operations")
+		}
 	case OperationCreateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
-	case OperationCreateBlock, OperationUpdateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
+		if op.NoteID == uuid.Nil {
+			return errors.New("noteId is required")
+		}
+	case OperationCreateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
+		if op.NoteID == uuid.Nil {
+			return errors.New("noteId is required")
+		}
 		if op.BlockID == nil || *op.BlockID == uuid.Nil {
 			return errors.New("blockId is required for block operations")
 		}

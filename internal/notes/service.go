@@ -76,7 +76,6 @@ func mapNoteDocument(doc store.NoteDocument) NoteResponse {
 	return NoteResponse{
 		ID:             doc.Note.ID,
 		OwnerID:        doc.Note.OwnerID,
-		CategoryID:     store.UUIDPtr(doc.Note.CategoryID),
 		Title:          doc.Note.Title,
 		Metadata:       store.NormalizeJSON(doc.Note.Metadata),
 		CurrentVersion: doc.Note.CurrentVersion,

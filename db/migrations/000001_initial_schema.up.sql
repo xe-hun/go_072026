@@ -14,7 +14,6 @@ CREATE TABLE categories (
 CREATE TABLE notes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
-    category_id UUID REFERENCES categories(id),
     title TEXT NOT NULL DEFAULT '',
     metadata JSONB NOT NULL DEFAULT '{}',
     current_version BIGINT NOT NULL DEFAULT 0,
@@ -25,10 +24,6 @@ CREATE TABLE notes (
 
 CREATE INDEX notes_owner_updated_idx
     ON notes (owner_id, updated_at DESC);
-
-CREATE INDEX notes_owner_category_idx
-    ON notes (owner_id, category_id)
-    WHERE deleted_at IS NULL;
 
 -- note_blocks stores current block-level state. position is a string fractional
 -- index, not a permanent integer array position.
@@ -70,7 +65,7 @@ CREATE INDEX sync_devices_owner_idx
 CREATE TABLE note_changes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
-    note_id UUID NOT NULL REFERENCES notes(id),
+    note_id UUID REFERENCES notes(id),
     block_id UUID,
     device_id UUID NOT NULL REFERENCES sync_devices(id),
     client_operation_id UUID NOT NULL,

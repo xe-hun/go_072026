@@ -21,6 +21,10 @@ func (s *Store) FindProcessedOperation(ctx context.Context, deviceID, operationI
 
 // InsertNoteChange appends the immutable history row for an accepted operation.
 func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams) (NoteChange, error) {
+	var noteID pgtype.UUID
+	if arg.NoteID != nil {
+		noteID = pgUUID(*arg.NoteID)
+	}
 	blockID := pgtype.UUID{}
 	if arg.BlockID != nil {
 		// Note-level changes intentionally leave block_id NULL.
@@ -29,7 +33,7 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 	change, err := s.q.InsertNoteChange(ctx, db.InsertNoteChangeParams{
 		ID:                   pgUUID(arg.ID),
 		OwnerID:              pgUUID(arg.OwnerID),
-		NoteID:               pgUUID(arg.NoteID),
+		NoteID:               noteID,
 		BlockID:              blockID,
 		DeviceID:             pgUUID(arg.DeviceID),
 		ClientOperationID:    pgUUID(arg.ClientOperationID),

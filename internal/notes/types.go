@@ -14,8 +14,6 @@ type NoteResponse struct {
 	ID uuid.UUID `json:"id"`
 	// OwnerID is included for diagnostics and should match the authenticated user.
 	OwnerID uuid.UUID `json:"ownerId"`
-	// CategoryID is optional because notes do not need a category.
-	CategoryID *uuid.UUID `json:"categoryId,omitempty"`
 	// Title is stored as a normal column for querying/display.
 	Title string `json:"title"`
 	// Metadata contains optional note-level JSONB properties.

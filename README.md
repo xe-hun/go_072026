@@ -95,12 +95,14 @@ include a per-note integer `sequence`; the server sorts by `noteId` and then
 - pulled changes after the supplied cursor
 - the next cursor
 
-`modify_note_property` writes key/value pairs directly into note metadata,
-`modify_note_title` edits title text with `{textOperation,index,text}`, and
-`update_block` uses nullable `changedProperties` plus a nested `textDelta`
-object. Current state updates and change-log inserts happen inside the same
-PostgreSQL transaction. Operation idempotency is enforced by `(device_id,
-client_operation_id)`.
+`modify_note_property` writes the supplied `metaData` object into note
+metadata, `modify_note_title` receives a nested `textDelta`, and
+`modify_block_property` receives `changedProperties` plus an optional nested
+`textDelta`. `create_category`, `modify_category`, and `delete_category` use
+`{id,name}` or `{id}` payloads respectively; note categories are metadata,
+not note columns. Current state updates and change-log inserts happen inside
+the same PostgreSQL transaction. Operation idempotency is enforced by
+`(device_id, client_operation_id)`.
 
 ## Assumptions
 

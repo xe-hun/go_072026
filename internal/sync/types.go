@@ -26,8 +26,8 @@ type Request struct {
 	Operations []ClientOperation `json:"operations"`
 }
 
-// ClientOperation is one idempotent note or block mutation submitted by a
-// device.
+// ClientOperation is one idempotent note, block, or category mutation
+// submitted by a device.
 type ClientOperation struct {
 	// OperationID is stable across retries and forms the idempotency key with
 	// DeviceID.
@@ -101,7 +101,6 @@ type RejectedOperation struct {
 type NoteSnapshot struct {
 	ID             uuid.UUID       `json:"id"`
 	OwnerID        uuid.UUID       `json:"ownerId"`
-	CategoryID     *uuid.UUID      `json:"categoryId,omitempty"`
 	Title          string          `json:"title"`
 	Metadata       json.RawMessage `json:"metadata"`
 	CurrentVersion int64           `json:"currentVersion"`

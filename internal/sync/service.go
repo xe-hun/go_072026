@@ -9,10 +9,9 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"time"
+	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"notes-server/internal/config"
 	"notes-server/internal/httpapi"
@@ -206,23 +205,26 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 		return nil, nil, err
 	}
 
-	accepted, err := s.acceptedOperationBatch(ctx, tx, ownerID, operations, acceptedItems)
+	accepted, err := acceptedOperationBatch(operations, acceptedItems)
 	if err != nil {
 		return nil, nil, err
 	}
 	return &accepted, nil, nil
 }
 
-func (s *Service) acceptedOperationBatch(ctx context.Context, tx *store.Store, ownerID uuid.UUID, operations []ClientOperation, acceptedItems []AcceptedOperation) (AcceptedOperation, error) {
+func acceptedOperationBatch(operations []ClientOperation, acceptedItems []AcceptedOperation) (AcceptedOperation, error) {
 	if len(acceptedItems) == 0 {
 		return AcceptedOperation{
 			OperationIDs: operationIDs(operations),
 			NoteID:       operations[0].NoteID,
 		}, nil
 	}
-	note, err := tx.GetNoteForOwner(ctx, operations[0].NoteID, ownerID)
-	if err != nil {
-		return AcceptedOperation{}, err
+	if operations[0].NoteID == uuid.Nil {
+		return AcceptedOperation{
+			OperationID:  acceptedItems[len(acceptedItems)-1].OperationID,
+			OperationIDs: operationIDs(operations),
+			Sequence:     maxAcceptedSequence(acceptedItems),
+		}, nil
 	}
 
 	last := acceptedItems[len(acceptedItems)-1]
@@ -230,7 +232,7 @@ func (s *Service) acceptedOperationBatch(ctx context.Context, tx *store.Store, o
 		OperationID:  last.OperationID,
 		OperationIDs: operationIDs(operations),
 		NoteID:       operations[0].NoteID,
-		NoteVersion:  note.CurrentVersion,
+		NoteVersion:  last.NoteVersion,
 		Sequence:     maxAcceptedSequence(acceptedItems),
 	}
 	if len(acceptedItems) == 1 {
@@ -243,6 +245,9 @@ func (s *Service) rejectedOperationBatch(ctx context.Context, tx *store.Store, o
 	rejected := failed
 	rejected.OperationIDs = operationIDs(operations)
 	rejected.NoteID = operations[0].NoteID
+	if operations[0].NoteID == uuid.Nil {
+		return rejected, nil
+	}
 
 	doc, err := tx.GetNoteDocument(ctx, operations[0].NoteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -294,8 +299,6 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
-	op.OperationType = normalizeOperationType(op.OperationType)
-
 	fields, err := decodeChangeObject(op.ChangeData)
 	if err != nil {
 		rejected := rejectedInvalid(op, "changeData is invalid.")
@@ -309,12 +312,83 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 		return s.mutateNote(ctx, tx, ownerID, deviceID, op, fields)
 	case OperationCreateBlock:
 		return s.createBlock(ctx, tx, ownerID, deviceID, op, fields)
-	case OperationUpdateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
+	case OperationDeleteBlock, OperationModifyBlockProperty:
 		return s.mutateBlock(ctx, tx, ownerID, deviceID, op, fields)
+	case OperationCreateCategory:
+		return s.createCategory(ctx, tx, ownerID, deviceID, op, fields)
+	case OperationDeleteCategory, OperationModifyCategory:
+		return s.mutateCategory(ctx, tx, ownerID, deviceID, op, fields)
 	default:
 		rejected := rejectedInvalid(op, "operationType is unsupported.")
 		return nil, &rejected, nil
 	}
+}
+
+func categoryIDAndName(fields map[string]json.RawMessage, requireName bool) (uuid.UUID, string, error) {
+	id, ok, err := getUUIDField(fields, "id")
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if !ok || id == uuid.Nil {
+		return uuid.Nil, "", errors.New("id is required")
+	}
+	if !requireName {
+		return id, "", nil
+	}
+	name, ok, err := getStringField(fields, "name")
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if !ok || strings.TrimSpace(name) == "" {
+		return uuid.Nil, "", errors.New("name is required")
+	}
+	return id, name, nil
+}
+
+func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+	id, name, err := categoryIDAndName(fields, true)
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if err := tx.CreateCategory(ctx, id, ownerID, name); err != nil {
+		return nil, nil, err
+	}
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, nil, 0, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	accepted := acceptedFromChange(change)
+	return &accepted, nil, nil
+}
+
+func (s *Service) mutateCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
+	id, name, err := categoryIDAndName(fields, op.OperationType == OperationModifyCategory)
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if err := tx.LockCategoryForOwner(ctx, id, ownerID); errors.Is(err, store.ErrNotFound) {
+		rejected := rejectedNotFound(op, "Category not found.")
+		return nil, &rejected, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+
+	if op.OperationType == OperationModifyCategory {
+		err = tx.UpdateCategory(ctx, id, ownerID, name)
+	} else {
+		err = tx.DeleteCategory(ctx, id, ownerID)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, nil, 0, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	accepted := acceptedFromChange(change)
+	return &accepted, nil, nil
 }
 
 // createNote applies create_note. A new note must be based on version 0 and
@@ -341,19 +415,9 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 	if !ok {
 		metadata = json.RawMessage(`{}`)
 	}
-	categoryID, ok, err := getNullableUUIDField(fields, "categoryId")
-	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	if !ok {
-		categoryID = pgtype.UUID{}
-	}
-
-	created, err := tx.CreateNote(ctx, store.Note{
+	err = tx.CreateNote(ctx, store.Note{
 		ID:             op.NoteID,
 		OwnerID:        ownerID,
-		CategoryID:     categoryID,
 		Title:          title,
 		Metadata:       metadata,
 		CurrentVersion: 1,
@@ -361,11 +425,11 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 	if err != nil {
 		return nil, nil, err
 	}
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, 0, created.CurrentVersion)
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, &op.NoteID, nil, 0, 1)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := s.enqueueSnapshotIfNeeded(ctx, tx, created.ID, ownerID, created.CurrentVersion); err != nil {
+	if err := s.enqueueSnapshotIfNeeded(ctx, tx, op.NoteID, ownerID, 1); err != nil {
 		return nil, nil, err
 	}
 	accepted := acceptedFromChange(change)
@@ -374,67 +438,115 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 
 // mutateNote applies update/delete operations for existing notes.
 func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
-	// The note row is locked before version checks so concurrent edits to the
-	// same note serialize.
-	note, err := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
-	if errors.Is(err, store.ErrNotFound) {
-		rejected := rejectedNotFound(op, "Note not found.")
-		return nil, &rejected, nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	if note.CurrentVersion != op.BaseNoteVersion {
-		// The client edited stale state. Return an explicit conflict rather than
-		// overwriting.
-		rejected := rejectedConflict(op, note.CurrentVersion)
-		return nil, &rejected, nil
-	}
-
-	baseVersion := note.CurrentVersion
-	// Every note-level mutation increments the note version.
-	note.CurrentVersion++
-
 	switch op.OperationType {
-
 	case OperationModifyNoteProperty:
-		if len(fields) == 0 {
+		metadataRaw, ok, err := getObjectField(fields, "metaData")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		if !ok {
 			rejected := rejectedInvalid(op, "modify_note_property must include at least one property.")
 			return nil, &rejected, nil
 		}
-		metadata, err := mergeJSONProperties(note.Metadata, fields, "metadata")
+		changes, err := decodeObjectFields(metadataRaw, "metaData")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		note.Metadata = metadata
+		if len(changes) == 0 {
+			rejected := rejectedInvalid(op, "modify_note_property must include at least one property.")
+			return nil, &rejected, nil
+		}
+		metadata, baseVersion, err := tx.GetNoteMetadataForOwnerForUpdate(ctx, op.NoteID, ownerID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Note not found.")
+			return nil, &rejected, nil
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if baseVersion != op.BaseNoteVersion {
+			rejected := rejectedConflict(op, baseVersion)
+			return nil, &rejected, nil
+		}
+		metadata, err = mergeJSONProperties(metadata, changes, "metadata")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		resultingVersion := baseVersion + 1
+		if err := tx.UpdateNoteMetadata(ctx, op.NoteID, ownerID, metadata, resultingVersion); err != nil {
+			return nil, nil, err
+		}
+		return s.acceptNoteMutation(ctx, tx, ownerID, deviceID, op, &op.NoteID, baseVersion, resultingVersion)
 
 	case OperationModifyNoteTitle:
-		textChange, err := decodeTextChange(op.ChangeData, "changeData")
+		textDelta, ok, err := getObjectField(fields, "textDelta")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		title, err := applyTextDelta(note.Title, textChange.Text, textChange.TextOperation, textChange.Index)
+		if !ok {
+			rejected := rejectedInvalid(op, "modify_note_title requires textDelta.")
+			return nil, &rejected, nil
+		}
+		textChange, err := decodeTextChange(textDelta, "textDelta")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		note.Title = title
+		title, baseVersion, err := tx.GetNoteTitleForOwnerForUpdate(ctx, op.NoteID, ownerID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Note not found.")
+			return nil, &rejected, nil
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if baseVersion != op.BaseNoteVersion {
+			rejected := rejectedConflict(op, baseVersion)
+			return nil, &rejected, nil
+		}
+		title, err = applyTextDelta(title, textChange.Text, textChange.TextOperation, textChange.Index)
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		resultingVersion := baseVersion + 1
+		if err := tx.UpdateNoteTitle(ctx, op.NoteID, ownerID, title, resultingVersion); err != nil {
+			return nil, nil, err
+		}
+		return s.acceptNoteMutation(ctx, tx, ownerID, deviceID, op, &op.NoteID, baseVersion, resultingVersion)
+
 	case OperationDeleteNote:
-
-		note.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+		baseVersion, err := tx.GetNoteVersionForOwnerForUpdate(ctx, op.NoteID, ownerID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Note not found.")
+			return nil, &rejected, nil
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if baseVersion != op.BaseNoteVersion {
+			rejected := rejectedConflict(op, baseVersion)
+			return nil, &rejected, nil
+		}
+		resultingVersion := baseVersion + 1
+		if err := tx.DeleteNote(ctx, op.NoteID, ownerID, resultingVersion); err != nil {
+			return nil, nil, err
+		}
+		return s.acceptNoteMutation(ctx, tx, ownerID, deviceID, op, &op.NoteID, baseVersion, resultingVersion)
 	}
+	return nil, nil, errors.New("unsupported note operation")
+}
 
-	updated, err := tx.UpdateNoteState(ctx, note)
+func (s *Service) acceptNoteMutation(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, noteID *uuid.UUID, baseVersion, resultingVersion int64) (*AcceptedOperation, *RejectedOperation, error) {
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, noteID, nil, baseVersion, resultingVersion)
 	if err != nil {
 		return nil, nil, err
 	}
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, baseVersion, updated.CurrentVersion)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := s.enqueueSnapshotIfNeeded(ctx, tx, updated.ID, ownerID, updated.CurrentVersion); err != nil {
+	if err := s.enqueueSnapshotIfNeeded(ctx, tx, *noteID, ownerID, resultingVersion); err != nil {
 		return nil, nil, err
 	}
 	accepted := acceptedFromChange(change)
@@ -443,21 +555,6 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 
 // createBlock applies create_block and increments the parent note version.
 func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
-	// Lock the parent note first because the note version is the global version
-	// for all block mutations within the note.
-	note, err := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
-	if errors.Is(err, store.ErrNotFound) {
-		rejected := rejectedNotFound(op, "Note not found.")
-		return nil, &rejected, nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	if note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, note.CurrentVersion)
-		return nil, &rejected, nil
-	}
-
 	position, ok, err := getIntField(fields, "position")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -480,19 +577,26 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		rejected := rejectedInvalid(op, "block is required.")
 		return nil, &rejected, nil
 	}
-	blockSnapshot, blockFields, err := decodeBlockSnapshot(blockRaw)
+	blockFields, err := decodeObjectFields(blockRaw, "block")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 
-	blockType := blockSnapshot.BlockType
-
+	blockType, ok, err := getStringField(blockFields, "blockType")
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if !ok {
+		rejected := rejectedInvalid(op, "block.blockType is required.")
+		return nil, &rejected, nil
+	}
 	if err := validateBlockType(blockType); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
-	text, ok, err := getStringField(blockFields, "text")
+	text, ok, err := getStringField(blockFields, "textContent")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
@@ -507,29 +611,38 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		properties = json.RawMessage(`{}`)
 	}
 
-	baseNoteVersion := note.CurrentVersion
-	// A block create is also a note mutation.
-	note.CurrentVersion++
-	if _, err := tx.UpdateNoteState(ctx, note); err != nil {
+	baseNoteVersion, err := tx.GetNoteVersionForOwnerForUpdate(ctx, op.NoteID, ownerID)
+	if errors.Is(err, store.ErrNotFound) {
+		rejected := rejectedNotFound(op, "Note not found.")
+		return nil, &rejected, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if baseNoteVersion != op.BaseNoteVersion {
+		rejected := rejectedConflict(op, baseNoteVersion)
+		return nil, &rejected, nil
+	}
+	resultingVersion := baseNoteVersion + 1
+	if err := tx.IncrementNoteVersion(ctx, op.NoteID, ownerID, resultingVersion); err != nil {
 		return nil, nil, err
 	}
 
-	block, err := tx.CreateBlock(ctx, store.NoteBlock{
+	if err := tx.CreateBlock(ctx, store.NoteBlock{
 		ID:          *op.BlockID,
-		NoteID:      note.ID,
+		NoteID:      op.NoteID,
 		BlockType:   blockType,
 		TextContent: text,
 		Position:    strconv.Itoa(position),
 		Properties:  properties,
-	})
+	}); err != nil {
+		return nil, nil, err
+	}
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, &op.NoteID, op.BlockID, baseNoteVersion, resultingVersion)
 	if err != nil {
 		return nil, nil, err
 	}
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, &block.ID, baseNoteVersion, note.CurrentVersion)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := s.enqueueSnapshotIfNeeded(ctx, tx, note.ID, ownerID, note.CurrentVersion); err != nil {
+	if err := s.enqueueSnapshotIfNeeded(ctx, tx, op.NoteID, ownerID, resultingVersion); err != nil {
 		return nil, nil, err
 	}
 	accepted := acceptedFromChange(change)
@@ -538,9 +651,53 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 
 // mutateBlock applies update/delete operations for existing blocks.
 func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedOperation, *RejectedOperation, error) {
-	// Lock order is note first, block second. Keeping this order everywhere avoids
-	// avoidable deadlocks when multiple API instances edit the same note.
-	note, err := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
+	var (
+		changedProperties map[string]json.RawMessage
+		textChange        TextChange
+		hasProperties     bool
+		hasText           bool
+		position          int
+	)
+
+	if op.OperationType == OperationModifyBlockProperty {
+		changedPropertiesRaw, hasChangedProperties, err := getObjectField(fields, "changedProperties")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		if hasChangedProperties {
+			changedProperties, err = decodeObjectFields(changedPropertiesRaw, "changedProperties")
+			hasProperties = true
+		}
+		textDeltaRaw, hasTextDelta, err := getObjectField(fields, "textDelta")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		if hasTextDelta {
+			textChange, err = decodeTextChange(textDeltaRaw, "textDelta")
+			hasText = true
+		}
+		if (!hasProperties || len(changedProperties) == 0) && !hasText {
+			rejected := rejectedInvalid(op, "modify_block_property must include changedProperties or textDelta.")
+			return nil, &rejected, nil
+		}
+	}
+	if op.OperationType == OperationDeleteBlock {
+		var ok bool
+		var err error
+		position, ok, err = getIntField(fields, "position")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return nil, &rejected, nil
+		}
+		if !ok || position < 0 {
+			rejected := rejectedInvalid(op, "position must be a non-negative integer.")
+			return nil, &rejected, nil
+		}
+	}
+
+	baseNoteVersion, err := tx.GetNoteVersionForOwnerForUpdate(ctx, op.NoteID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
 		rejected := rejectedNotFound(op, "Note not found.")
 		return nil, &rejected, nil
@@ -548,85 +705,77 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	if err != nil {
 		return nil, nil, err
 	}
-	if note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, note.CurrentVersion)
+	if baseNoteVersion != op.BaseNoteVersion {
+		rejected := rejectedConflict(op, baseNoteVersion)
 		return nil, &rejected, nil
 	}
 
-	block, err := tx.GetBlockForNoteForUpdate(ctx, note.ID, *op.BlockID)
-	if errors.Is(err, store.ErrNotFound) {
-		rejected := rejectedNotFound(op, "Block not found.")
-		return nil, &rejected, nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-
-	baseNoteVersion := note.CurrentVersion
-	// A block mutation increments the parent note version.
-	note.CurrentVersion++
-
-	switch op.OperationType {
-	case OperationUpdateBlock:
-		changed := false
-		if changedProperties, ok, err := getNullableObjectFields(fields, "changedProperties"); err != nil {
-			rejected := rejectedInvalid(op, err.Error())
+	var properties json.RawMessage
+	var text string
+	if op.OperationType == OperationDeleteBlock {
+		if err := tx.LockBlockForUpdate(ctx, op.NoteID, *op.BlockID, strconv.Itoa(position)); errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Block not found.")
 			return nil, &rejected, nil
-		} else if ok {
-			properties, err := mergeJSONProperties(block.Properties, changedProperties, "properties")
-			if err != nil {
-				rejected := rejectedInvalid(op, err.Error())
-				return nil, &rejected, nil
-			}
-			block.Properties = properties
-			changed = len(changedProperties) > 0
+		} else if err != nil {
+			return nil, nil, err
 		}
-
-		textChange, hasTextDelta, err := getNullableTextChangeField(fields, "textDelta")
+	}
+	if hasProperties {
+		properties, err = tx.GetBlockPropertiesForUpdate(ctx, op.NoteID, *op.BlockID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Block not found.")
+			return nil, &rejected, nil
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		properties, err = mergeJSONProperties(properties, changedProperties, "properties")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		if hasTextDelta {
-			text, err := applyTextDelta(block.TextContent, textChange.Text, textChange.TextOperation, textChange.Index)
-			if err != nil {
-				rejected := rejectedInvalid(op, err.Error())
-				return nil, &rejected, nil
-			}
-			block.TextContent = text
-			changed = true
-		}
-		if !changed {
-			rejected := rejectedInvalid(op, "update_block must include at least one supported field.")
+	}
+	if hasText {
+		text, err = tx.GetBlockTextForUpdate(ctx, op.NoteID, *op.BlockID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Block not found.")
 			return nil, &rejected, nil
 		}
-	case OperationModifyBlockProperty:
-		if len(fields) == 0 {
-			rejected := rejectedInvalid(op, "modify_block_property must include at least one property.")
-			return nil, &rejected, nil
+		if err != nil {
+			return nil, nil, err
 		}
-		properties, err := mergeJSONProperties(block.Properties, fields, "properties")
+		text, err = applyTextDelta(text, textChange.Text, textChange.TextOperation, textChange.Index)
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		block.Properties = properties
-	case OperationDeleteBlock:
-		// Deletion is soft so offline devices can receive the tombstone later.
-		block.DeletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	}
 
-	if _, err := tx.UpdateNoteState(ctx, note); err != nil {
+	resultingVersion := baseNoteVersion + 1
+	if err := tx.IncrementNoteVersion(ctx, op.NoteID, ownerID, resultingVersion); err != nil {
 		return nil, nil, err
 	}
-	if _, err := tx.UpdateBlockState(ctx, block); err != nil {
-		return nil, nil, err
+	if hasProperties {
+		if err := tx.UpdateBlockProperties(ctx, op.NoteID, *op.BlockID, properties); err != nil {
+			return nil, nil, err
+		}
 	}
-	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, op.BlockID, baseNoteVersion, note.CurrentVersion)
+	if hasText {
+		if err := tx.UpdateBlockText(ctx, op.NoteID, *op.BlockID, text); err != nil {
+			return nil, nil, err
+		}
+	}
+	if op.OperationType == OperationDeleteBlock {
+		if err := tx.DeleteBlock(ctx, op.NoteID, *op.BlockID); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, &op.NoteID, op.BlockID, baseNoteVersion, resultingVersion)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := s.enqueueSnapshotIfNeeded(ctx, tx, note.ID, ownerID, note.CurrentVersion); err != nil {
+	if err := s.enqueueSnapshotIfNeeded(ctx, tx, op.NoteID, ownerID, resultingVersion); err != nil {
 		return nil, nil, err
 	}
 	accepted := acceptedFromChange(change)
@@ -664,35 +813,6 @@ func applyTextDelta(current, delta, operationType string, index int) (string, er
 	}
 }
 
-func decodeBlockSnapshot(raw json.RawMessage) (BlockSnapshot, map[string]json.RawMessage, error) {
-	fields, err := decodeObjectFields(raw, "block")
-	if err != nil {
-		return BlockSnapshot{}, nil, err
-	}
-	block := BlockSnapshot{}
-	// if rawID, ok := fields["id"]; ok && !isJSONNull(rawID) {
-	// 	if err := json.Unmarshal(rawID, &block.ID); err != nil {
-	// 		return BlockSnapshot{}, nil, errors.New("block.id must be a UUID")
-	// 	}
-	// }
-	// if rawNoteID, ok := fields["noteId"]; ok && !isJSONNull(rawNoteID) {
-	// 	if err := json.Unmarshal(rawNoteID, &block.NoteID); err != nil {
-	// 		return BlockSnapshot{}, nil, errors.New("block.noteId must be a UUID")
-	// 	}
-	// }
-	blockType, _, err := getStringField(fields, "blockType")
-	if err != nil {
-		return BlockSnapshot{}, nil, err
-	}
-	block.BlockType = blockType
-	text, _, err := getStringField(fields, "textContent")
-	if err != nil {
-		return BlockSnapshot{}, nil, err
-	}
-	block.TextContent = text
-	return block, fields, nil
-}
-
 func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMessage, name string) (json.RawMessage, error) {
 	merged, err := decodeObjectFields(store.NormalizeJSON(current), name)
 	if err != nil {
@@ -705,11 +825,11 @@ func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMes
 }
 
 // insertChange writes the append-only history row for an accepted operation.
-func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
+func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, noteID, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
 	return tx.InsertNoteChange(ctx, store.InsertNoteChangeParams{
 		ID:                   uuid.New(),
 		OwnerID:              ownerID,
-		NoteID:               op.NoteID,
+		NoteID:               noteID,
 		BlockID:              blockID,
 		DeviceID:             deviceID,
 		ClientOperationID:    op.OperationID,
@@ -794,7 +914,6 @@ func mapNoteSnapshot(doc store.NoteDocument) NoteSnapshot {
 	return NoteSnapshot{
 		ID:             doc.Note.ID,
 		OwnerID:        doc.Note.OwnerID,
-		CategoryID:     store.UUIDPtr(doc.Note.CategoryID),
 		Title:          doc.Note.Title,
 		Metadata:       store.NormalizeJSON(doc.Note.Metadata),
 		CurrentVersion: doc.Note.CurrentVersion,

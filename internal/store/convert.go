@@ -55,7 +55,6 @@ func fromDBNote(value db.Note) Note {
 	return Note{
 		ID:             uuid.UUID(value.ID.Bytes),
 		OwnerID:        uuid.UUID(value.OwnerID.Bytes),
-		CategoryID:     value.CategoryID,
 		Title:          value.Title,
 		Metadata:       NormalizeJSON(json.RawMessage(value.Metadata)),
 		CurrentVersion: value.CurrentVersion,

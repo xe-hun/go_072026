@@ -157,7 +157,7 @@ A note contains:
 
 - ID
 - Owner ID
-- Optional category ID
+- Category data in note-level metadata
 - Title
 - Note-level metadata
 - Current note version
@@ -257,7 +257,6 @@ CREATE TABLE categories (
 CREATE TABLE notes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
-    category_id UUID REFERENCES categories(id),
     title TEXT NOT NULL DEFAULT '',
     metadata JSONB NOT NULL DEFAULT '{}',
     current_version BIGINT NOT NULL DEFAULT 0,
@@ -269,9 +268,6 @@ CREATE TABLE notes (
 CREATE INDEX notes_owner_updated_idx
     ON notes (owner_id, updated_at DESC);
 
-CREATE INDEX notes_owner_category_idx
-    ON notes (owner_id, category_id)
-    WHERE deleted_at IS NULL;
 ```
 
 ### 6.3 Note Blocks
@@ -279,7 +275,7 @@ CREATE INDEX notes_owner_category_idx
 ```sql
 CREATE TABLE note_blocks (
     id UUID PRIMARY KEY,
-    note_id UUID NOT NULL REFERENCES notes(id),
+    note_id UUID REFERENCES notes(id),
     block_type TEXT NOT NULL,
     text_content TEXT NOT NULL DEFAULT '',
     position TEXT NOT NULL,
@@ -352,30 +348,33 @@ CREATE INDEX note_changes_note_version_idx
 Initial operation types:
 
 - create_note
-- update_note
 - delete_note
 - modify_note_property
 - modify_note_title
 - create_block
-- update_block
 - delete_block
 - modify_block_property
+- create_category
+- delete_category
+- modify_category
 
-Example change payload:
+Operation payloads use direct operation-specific objects:
 
 ```json
 {
-  "changedProperties": {
-    "isChecked": false,
-    "isBold": true
-  },
-  "textDelta": {
-    "textOperation": "insert",
-    "index": 8,
-    "text": " and bread"
+  "metaData": {
+    "isPinned": true
   }
 }
 ```
+
+`modify_note_title` uses `{ "textDelta": { "textOperation": "insert",
+"index": 8, "text": " and bread" } }`.
+`create_block` uses `{ "position": 1, "block": blockObject }`,
+`delete_block` uses `{ "position": 1 }`, and
+`modify_block_property` uses `changedProperties` and `textDelta` in the same
+direct object. Category operations use `{ "id": "uuid", "name": "name" }`
+for create/modify and `{ "id": "uuid" }` for delete.
 
 Store operations or changed fields, not only raw character diffs.
 
@@ -404,7 +403,6 @@ Snapshot structure:
   "note": {
     "id": "uuid",
     "title": "Shopping",
-    "categoryId": "uuid",
     "metadata": {},
     "version": 20,
     "deletedAt": null
