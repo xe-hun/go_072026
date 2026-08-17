@@ -56,7 +56,7 @@ func fromDBNote(value db.Note) Note {
 		ID:             uuid.UUID(value.ID.Bytes),
 		OwnerID:        uuid.UUID(value.OwnerID.Bytes),
 		Title:          value.Title,
-		Metadata:       NormalizeJSON(json.RawMessage(value.Metadata)),
+		NoteProperties: NormalizeJSON(json.RawMessage(value.NoteProperties)),
 		CurrentVersion: value.CurrentVersion,
 		CreatedAt:      value.CreatedAt.Time,
 		UpdatedAt:      value.UpdatedAt.Time,
@@ -67,15 +67,15 @@ func fromDBNote(value db.Note) Note {
 // fromDBBlock maps a generated block row and normalizes JSONB fields.
 func fromDBBlock(value db.NoteBlock) NoteBlock {
 	return NoteBlock{
-		ID:          uuid.UUID(value.ID.Bytes),
-		NoteID:      uuid.UUID(value.NoteID.Bytes),
-		BlockType:   value.BlockType,
-		TextContent: value.TextContent,
-		Position:    value.Position,
-		Properties:  NormalizeJSON(json.RawMessage(value.Properties)),
-		CreatedAt:   value.CreatedAt.Time,
-		UpdatedAt:   value.UpdatedAt.Time,
-		DeletedAt:   value.DeletedAt,
+		ID:              uuid.UUID(value.ID.Bytes),
+		NoteID:          uuid.UUID(value.NoteID.Bytes),
+		BlockType:       value.BlockType,
+		TextContent:     value.TextContent,
+		Position:        value.Position,
+		BlockProperties: NormalizeJSON(json.RawMessage(value.BlockProperties)),
+		CreatedAt:       value.CreatedAt.Time,
+		UpdatedAt:       value.UpdatedAt.Time,
+		DeletedAt:       value.DeletedAt,
 	}
 }
 

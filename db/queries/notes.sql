@@ -23,7 +23,7 @@ ORDER BY position ASC, created_at ASC;
 -- name: CreateNote :exec
 -- Inserts current note state.
 INSERT INTO notes (
-    id, owner_id, title, metadata, current_version
+    id, owner_id, title, note_properties, current_version
 ) VALUES (
     $1, $2, $3, $4, $5
 );
@@ -32,7 +32,7 @@ INSERT INTO notes (
 -- Writes the complete note state after a successful operation batch.
 UPDATE notes
 SET title = $3,
-    metadata = $4,
+    note_properties = $4,
     current_version = $5,
     updated_at = now(),
     deleted_at = $6
@@ -42,7 +42,7 @@ WHERE id = $1
 -- name: CreateBlock :exec
 -- Inserts current block state.
 INSERT INTO note_blocks (
-    id, note_id, block_type, text_content, position, properties
+    id, note_id, block_type, text_content, position, block_properties
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 );
@@ -53,7 +53,7 @@ UPDATE note_blocks
 SET block_type = $3,
     text_content = $4,
     position = $5,
-    properties = $6,
+    block_properties = $6,
     updated_at = now(),
     deleted_at = $7
 WHERE id = $1

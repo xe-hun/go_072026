@@ -79,9 +79,9 @@ Tooling dependencies:
 
 `categories` stores user-owned note categories.
 
-`notes` stores note-level state: owner, title, metadata JSON, current note version, timestamps, and tombstone deletion timestamp. Category data is supplied through note metadata.
+`notes` stores note-level state: owner, title, note-properties JSON, current note version, timestamps, and tombstone deletion timestamp. Category data is supplied through note properties.
 
-`note_blocks` stores ordered blocks. Blocks use string positions for fractional indexing so inserts and moves usually update only one row.
+`note_blocks` stores ordered blocks and block-properties JSON. Blocks use string positions for fractional indexing so inserts and moves usually update only one row.
 
 `sync_devices` stores per-user devices, protocol version, last seen timestamp, revocation timestamp, and last global cursor.
 
@@ -163,7 +163,7 @@ The service:
 4. Sorts operations by `noteId` and then client `sequence`.
 5. Applies each note's operations as one savepoint-backed batch.
 6. Looks up `(device_id, operation_id)` to make retries idempotent.
-7. Validates operation type, block ID requirements, change format, and direct changeData shapes.
+7. Validates operation type, change format, direct changeData shapes, and block IDs contained in those shapes.
 8. Locks and loads the complete note document once for each note batch.
 9. Compares client note base versions to the loaded server version.
 10. Applies valid operations in sequence to the in-memory document.

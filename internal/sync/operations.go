@@ -18,9 +18,9 @@ const (
 	OperationModifyNoteTitle    = "modify_note_title"
 
 	// Block operation names.
-	OperationCreateBlock         = "create_block"
-	OperationDeleteBlock         = "delete_block"
-	OperationModifyBlockProperty = "modify_block_property"
+	OperationCreateBlock = "create_block"
+	OperationDeleteBlock = "delete_block"
+	OperationModifyBlock = "modify_block"
 
 	// Category operation names.
 	OperationCreateCategory = "create_category"
@@ -47,7 +47,7 @@ var allowedBlockTypes = map[string]struct{}{
 }
 
 // TextChange is the direct text delta shape used by modify_note_title and the
-// nested modify_block_property.textDelta payload.
+// nested modify_block.textDelta payload.
 type TextChange struct {
 	TextOperation string
 	Index         int
@@ -113,6 +113,38 @@ func getIntField(fields map[string]json.RawMessage, key string) (int, bool, erro
 		return 0, true, fmt.Errorf("%s must be an integer", key)
 	}
 	return value, true, nil
+}
+
+// getFloatField reads an optional JSON number.
+func getFloatField(fields map[string]json.RawMessage, key string) (float64, bool, error) {
+	raw, ok := fields[key]
+	if !ok {
+		return 0, false, nil
+	}
+	if isJSONNull(raw) {
+		return 0, true, fmt.Errorf("%s must be a number", key)
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, true, fmt.Errorf("%s must be a number", key)
+	}
+	return value, true, nil
+}
+
+// getArrayField reads an optional JSON array as raw element values.
+func getArrayField(fields map[string]json.RawMessage, key string) ([]json.RawMessage, bool, error) {
+	raw, ok := fields[key]
+	if !ok {
+		return nil, false, nil
+	}
+	if isJSONNull(raw) {
+		return nil, true, fmt.Errorf("%s must be an array", key)
+	}
+	var values []json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, true, fmt.Errorf("%s must be an array", key)
+	}
+	return values, true, nil
 }
 
 // getObjectField reads an optional JSON object field and returns the raw object
@@ -208,12 +240,9 @@ func validateOperationShape(op ClientOperation) error {
 		if op.NoteID == uuid.Nil {
 			return errors.New("noteId is required")
 		}
-	case OperationCreateBlock, OperationDeleteBlock, OperationModifyBlockProperty:
+	case OperationCreateBlock, OperationDeleteBlock, OperationModifyBlock:
 		if op.NoteID == uuid.Nil {
 			return errors.New("noteId is required")
-		}
-		if op.BlockID == nil || *op.BlockID == uuid.Nil {
-			return errors.New("blockId is required for block operations")
 		}
 	default:
 		return errors.New("operationType is unsupported")

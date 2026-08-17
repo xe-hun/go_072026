@@ -56,7 +56,7 @@ func (s *Store) CreateNote(ctx context.Context, note Note) error {
 		ID:             pgUUID(note.ID),
 		OwnerID:        pgUUID(note.OwnerID),
 		Title:          note.Title,
-		Metadata:       []byte(NormalizeJSON(note.Metadata)),
+		NoteProperties: []byte(NormalizeJSON(note.NoteProperties)),
 		CurrentVersion: note.CurrentVersion,
 	})
 }
@@ -67,7 +67,7 @@ func (s *Store) UpdateNoteState(ctx context.Context, note Note) error {
 		ID:             pgUUID(note.ID),
 		OwnerID:        pgUUID(note.OwnerID),
 		Title:          note.Title,
-		Metadata:       []byte(NormalizeJSON(note.Metadata)),
+		NoteProperties: []byte(NormalizeJSON(note.NoteProperties)),
 		CurrentVersion: note.CurrentVersion,
 		DeletedAt:      note.DeletedAt,
 	})
@@ -76,25 +76,25 @@ func (s *Store) UpdateNoteState(ctx context.Context, note Note) error {
 // CreateBlock inserts a new block.
 func (s *Store) CreateBlock(ctx context.Context, block NoteBlock) error {
 	return s.q.CreateBlock(ctx, db.CreateBlockParams{
-		ID:          pgUUID(block.ID),
-		NoteID:      pgUUID(block.NoteID),
-		BlockType:   block.BlockType,
-		TextContent: block.TextContent,
-		Position:    block.Position,
-		Properties:  []byte(NormalizeJSON(block.Properties)),
+		ID:              pgUUID(block.ID),
+		NoteID:          pgUUID(block.NoteID),
+		BlockType:       block.BlockType,
+		TextContent:     block.TextContent,
+		Position:        block.Position,
+		BlockProperties: []byte(NormalizeJSON(block.BlockProperties)),
 	})
 }
 
 // UpdateBlockState writes an existing block after a successful batch.
 func (s *Store) UpdateBlockState(ctx context.Context, block NoteBlock) error {
 	return s.q.UpdateBlockState(ctx, db.UpdateBlockStateParams{
-		ID:          pgUUID(block.ID),
-		NoteID:      pgUUID(block.NoteID),
-		BlockType:   block.BlockType,
-		TextContent: block.TextContent,
-		Position:    block.Position,
-		Properties:  []byte(NormalizeJSON(block.Properties)),
-		DeletedAt:   block.DeletedAt,
+		ID:              pgUUID(block.ID),
+		NoteID:          pgUUID(block.NoteID),
+		BlockType:       block.BlockType,
+		TextContent:     block.TextContent,
+		Position:        block.Position,
+		BlockProperties: []byte(NormalizeJSON(block.BlockProperties)),
+		DeletedAt:       block.DeletedAt,
 	})
 }
 

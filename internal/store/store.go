@@ -44,8 +44,8 @@ type Note struct {
 	OwnerID uuid.UUID
 	// Title is a frequently queried/displayed normal column.
 	Title string
-	// Metadata contains optional JSONB note-level properties.
-	Metadata json.RawMessage
+	// NoteProperties contains optional JSONB note-level properties.
+	NoteProperties json.RawMessage
 	// CurrentVersion increments once for each successful note operation batch.
 	CurrentVersion int64
 	CreatedAt      time.Time
@@ -66,10 +66,10 @@ type NoteBlock struct {
 	TextContent string
 	// Position is the fractional-index ordering key.
 	Position string
-	// Properties stores type-specific JSONB properties.
-	Properties json.RawMessage
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// BlockProperties stores type-specific JSONB properties.
+	BlockProperties json.RawMessage
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 	// DeletedAt is the block tombstone timestamp when soft deleted.
 	DeletedAt pgtype.Timestamptz
 }
@@ -88,7 +88,7 @@ type NoteChange struct {
 	DeviceID uuid.UUID
 	// ClientOperationID is the stable operation UUID used for idempotency.
 	ClientOperationID uuid.UUID
-	// OperationType is the concrete operation, for example modify_block_property.
+	// OperationType is the concrete operation, for example modify_block.
 	OperationType string
 	// BaseNoteVersion is the client version before the operation.
 	BaseNoteVersion int64

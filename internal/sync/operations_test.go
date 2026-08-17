@@ -7,23 +7,22 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestValidateOperationShapeRequiresBlockID protects the rule that every block
-// operation must name the target block.
-func TestValidateOperationShapeRequiresBlockID(t *testing.T) {
+// TestValidateOperationShapeDoesNotRequireBlockID protects the rule that block
+// targets are carried by changeData instead of the operation envelope.
+func TestValidateOperationShapeDoesNotRequireBlockID(t *testing.T) {
 	op := ClientOperation{
 		OperationID:   uuid.New(),
 		NoteID:        uuid.New(),
-		OperationType: OperationModifyBlockProperty,
+		OperationType: OperationModifyBlock,
 	}
-	if err := validateOperationShape(op); err == nil {
-		t.Fatal("expected missing blockId to fail validation")
+	if err := validateOperationShape(op); err != nil {
+		t.Fatalf("expected missing blockId to pass validation: %v", err)
 	}
 }
 
 // TestValidateOperationShapeAcceptsNewOperationTypes protects the note/block
 // operation names used by the direct changeData payloads.
 func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {
-	blockID := uuid.New()
 	categoryOperations := []string{OperationCreateCategory, OperationDeleteCategory, OperationModifyCategory}
 	for _, operationType := range categoryOperations {
 		if err := validateOperationShape(ClientOperation{
@@ -36,7 +35,7 @@ func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {
 	ops := []ClientOperation{
 		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyNoteProperty},
 		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyNoteTitle},
-		{OperationID: uuid.New(), NoteID: uuid.New(), BlockID: &blockID, OperationType: OperationModifyBlockProperty},
+		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyBlock},
 	}
 	for _, op := range ops {
 		if err := validateOperationShape(op); err != nil {
@@ -87,7 +86,7 @@ func TestDecodeChangeObjectRejectsNonObject(t *testing.T) {
 }
 
 // TestDecodeTextChangeRequiresDirectShape verifies the text delta object
-// expected by modify_note_title and modify_block_property.
+// expected by modify_note_title and modify_block.
 func TestDecodeTextChangeRequiresDirectShape(t *testing.T) {
 	change, err := decodeTextChange(json.RawMessage(`{"textOperation":"insert","index":1,"text":"e"}`), "changeData")
 	if err != nil {

@@ -13,19 +13,19 @@ import (
 
 const createBlock = `-- name: CreateBlock :exec
 INSERT INTO note_blocks (
-    id, note_id, block_type, text_content, position, properties
+    id, note_id, block_type, text_content, position, block_properties
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
 `
 
 type CreateBlockParams struct {
-	ID          pgtype.UUID `json:"id"`
-	NoteID      pgtype.UUID `json:"note_id"`
-	BlockType   string      `json:"block_type"`
-	TextContent string      `json:"text_content"`
-	Position    string      `json:"position"`
-	Properties  []byte      `json:"properties"`
+	ID              pgtype.UUID `json:"id"`
+	NoteID          pgtype.UUID `json:"note_id"`
+	BlockType       string      `json:"block_type"`
+	TextContent     string      `json:"text_content"`
+	Position        string      `json:"position"`
+	BlockProperties []byte      `json:"block_properties"`
 }
 
 // Inserts current block state.
@@ -36,14 +36,14 @@ func (q *Queries) CreateBlock(ctx context.Context, arg CreateBlockParams) error 
 		arg.BlockType,
 		arg.TextContent,
 		arg.Position,
-		arg.Properties,
+		arg.BlockProperties,
 	)
 	return err
 }
 
 const createNote = `-- name: CreateNote :exec
 INSERT INTO notes (
-    id, owner_id, title, metadata, current_version
+    id, owner_id, title, note_properties, current_version
 ) VALUES (
     $1, $2, $3, $4, $5
 )
@@ -53,7 +53,7 @@ type CreateNoteParams struct {
 	ID             pgtype.UUID `json:"id"`
 	OwnerID        pgtype.UUID `json:"owner_id"`
 	Title          string      `json:"title"`
-	Metadata       []byte      `json:"metadata"`
+	NoteProperties []byte      `json:"note_properties"`
 	CurrentVersion int64       `json:"current_version"`
 }
 
@@ -63,14 +63,14 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) error {
 		arg.ID,
 		arg.OwnerID,
 		arg.Title,
-		arg.Metadata,
+		arg.NoteProperties,
 		arg.CurrentVersion,
 	)
 	return err
 }
 
 const getNoteForOwner = `-- name: GetNoteForOwner :one
-SELECT id, owner_id, title, metadata, current_version, created_at, updated_at, deleted_at
+SELECT id, owner_id, title, note_properties, current_version, created_at, updated_at, deleted_at
 FROM notes
 WHERE id = $1
   AND owner_id = $2
@@ -89,7 +89,7 @@ func (q *Queries) GetNoteForOwner(ctx context.Context, arg GetNoteForOwnerParams
 		&i.ID,
 		&i.OwnerID,
 		&i.Title,
-		&i.Metadata,
+		&i.NoteProperties,
 		&i.CurrentVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -99,7 +99,7 @@ func (q *Queries) GetNoteForOwner(ctx context.Context, arg GetNoteForOwnerParams
 }
 
 const getNoteForOwnerForUpdate = `-- name: GetNoteForOwnerForUpdate :one
-SELECT id, owner_id, title, metadata, current_version, created_at, updated_at, deleted_at
+SELECT id, owner_id, title, note_properties, current_version, created_at, updated_at, deleted_at
 FROM notes
 WHERE id = $1
   AND owner_id = $2
@@ -119,7 +119,7 @@ func (q *Queries) GetNoteForOwnerForUpdate(ctx context.Context, arg GetNoteForOw
 		&i.ID,
 		&i.OwnerID,
 		&i.Title,
-		&i.Metadata,
+		&i.NoteProperties,
 		&i.CurrentVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -129,7 +129,7 @@ func (q *Queries) GetNoteForOwnerForUpdate(ctx context.Context, arg GetNoteForOw
 }
 
 const listBlocksForNote = `-- name: ListBlocksForNote :many
-SELECT id, note_id, block_type, text_content, position, properties, created_at, updated_at, deleted_at
+SELECT id, note_id, block_type, text_content, position, block_properties, created_at, updated_at, deleted_at
 FROM note_blocks
 WHERE note_id = $1
 ORDER BY position ASC, created_at ASC
@@ -151,7 +151,7 @@ func (q *Queries) ListBlocksForNote(ctx context.Context, noteID pgtype.UUID) ([]
 			&i.BlockType,
 			&i.TextContent,
 			&i.Position,
-			&i.Properties,
+			&i.BlockProperties,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -171,7 +171,7 @@ UPDATE note_blocks
 SET block_type = $3,
     text_content = $4,
     position = $5,
-    properties = $6,
+    block_properties = $6,
     updated_at = now(),
     deleted_at = $7
 WHERE id = $1
@@ -179,13 +179,13 @@ WHERE id = $1
 `
 
 type UpdateBlockStateParams struct {
-	ID          pgtype.UUID        `json:"id"`
-	NoteID      pgtype.UUID        `json:"note_id"`
-	BlockType   string             `json:"block_type"`
-	TextContent string             `json:"text_content"`
-	Position    string             `json:"position"`
-	Properties  []byte             `json:"properties"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	ID              pgtype.UUID        `json:"id"`
+	NoteID          pgtype.UUID        `json:"note_id"`
+	BlockType       string             `json:"block_type"`
+	TextContent     string             `json:"text_content"`
+	Position        string             `json:"position"`
+	BlockProperties []byte             `json:"block_properties"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
 // Writes complete block state after a successful operation batch.
@@ -196,7 +196,7 @@ func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStatePara
 		arg.BlockType,
 		arg.TextContent,
 		arg.Position,
-		arg.Properties,
+		arg.BlockProperties,
 		arg.DeletedAt,
 	)
 	return err
@@ -205,7 +205,7 @@ func (q *Queries) UpdateBlockState(ctx context.Context, arg UpdateBlockStatePara
 const updateNoteState = `-- name: UpdateNoteState :exec
 UPDATE notes
 SET title = $3,
-    metadata = $4,
+    note_properties = $4,
     current_version = $5,
     updated_at = now(),
     deleted_at = $6
@@ -217,7 +217,7 @@ type UpdateNoteStateParams struct {
 	ID             pgtype.UUID        `json:"id"`
 	OwnerID        pgtype.UUID        `json:"owner_id"`
 	Title          string             `json:"title"`
-	Metadata       []byte             `json:"metadata"`
+	NoteProperties []byte             `json:"note_properties"`
 	CurrentVersion int64              `json:"current_version"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
@@ -228,7 +228,7 @@ func (q *Queries) UpdateNoteState(ctx context.Context, arg UpdateNoteStateParams
 		arg.ID,
 		arg.OwnerID,
 		arg.Title,
-		arg.Metadata,
+		arg.NoteProperties,
 		arg.CurrentVersion,
 		arg.DeletedAt,
 	)

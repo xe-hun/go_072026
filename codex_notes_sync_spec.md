@@ -258,7 +258,7 @@ CREATE TABLE notes (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
     title TEXT NOT NULL DEFAULT '',
-    metadata JSONB NOT NULL DEFAULT '{}',
+    note_properties JSONB NOT NULL DEFAULT '{}',
     current_version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -279,7 +279,7 @@ CREATE TABLE note_blocks (
     block_type TEXT NOT NULL,
     text_content TEXT NOT NULL DEFAULT '',
     position TEXT NOT NULL,
-    properties JSONB NOT NULL DEFAULT '{}',
+    block_properties JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -352,7 +352,7 @@ Initial operation types:
 - modify_note_title
 - create_block
 - delete_block
-- modify_block_property
+- modify_block
 - create_category
 - delete_category
 - modify_category
@@ -361,7 +361,7 @@ Operation payloads use direct operation-specific objects:
 
 ```json
 {
-  "metaData": {
+  "noteProperties": {
     "isPinned": true
   }
 }
@@ -369,10 +369,10 @@ Operation payloads use direct operation-specific objects:
 
 `modify_note_title` uses `{ "textDelta": { "textOperation": "insert",
 "index": 8, "text": " and bread" } }`.
-`create_block` uses `{ "position": 1, "block": blockObject }`,
-`delete_block` uses `{ "position": 1 }`, and
-`modify_block_property` uses `changedProperties` and `textDelta` in the same
-direct object. Category operations use `{ "id": "uuid", "name": "name" }`
+`create_block` uses a direct block object with `{ "id": "uuid", "blockType": "text", "position": 1.0, "textContent": "...", "blockProperties": {} }`,
+`delete_block` uses `{ "id": "uuid" }`, and
+`modify_block` uses `blockProperties` and `textDelta` in the same direct object.
+Category operations use `{ "id": "uuid", "name": "name" }`
 for create/modify and `{ "id": "uuid" }` for delete.
 
 Store operations or changed fields, not only raw character diffs.
@@ -402,7 +402,7 @@ Snapshot structure:
   "note": {
     "id": "uuid",
     "title": "Shopping",
-    "metadata": {},
+    "noteProperties": {},
     "version": 20,
     "deletedAt": null
   },
@@ -411,8 +411,8 @@ Snapshot structure:
       "id": "uuid",
       "type": "todo",
       "text": "Buy milk",
-      "position": "a0",
-      "properties": {
+      "position": 1.0,
+      "blockProperties": {
         "isChecked": false
       },
       "version": 4,
@@ -492,12 +492,12 @@ Accept-Encoding: gzip
     {
       "operationId": "uuid",
       "noteId": "uuid",
-      "blockId": "uuid",
-      "operationType": "update_block",
+      "operationType": "modify_block",
       "sequence": 3,
       "baseNoteVersion": 17,
       "changeFormat": "structured-operation-v1",
       "changeData": {
+        "id": "uuid",
         "textDelta": {
           "textOperation": "insert",
           "index": 13,

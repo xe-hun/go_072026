@@ -235,9 +235,10 @@ Generate UUIDs for the operation and note. Then send:
       "changeFormat": "structured-operation-v1",
       "changeData": {
         "title": "Shopping",
-        "metadata": {
+        "noteProperties": {
           "isPinned": true
-        }
+        },
+        "blocks": []
       }
     }
   ]
@@ -261,21 +262,17 @@ Use the note version returned from the note creation response:
     {
       "operationId": "<OPERATION_ID>",
       "noteId": "<NOTE_ID>",
-      "blockId": "<BLOCK_ID>",
       "operationType": "create_block",
       "sequence": 1,
       "baseNoteVersion": 1,
       "changeFormat": "structured-operation-v1",
       "changeData": {
-        "position": 1,
-        "block": {
-          "id": "<BLOCK_ID>",
-          "noteId": "<NOTE_ID>",
-          "blockType": "todo",
-          "textContent": "Buy milk",
-          "properties": {
-            "isChecked": false
-          }
+        "id": "<BLOCK_ID>",
+        "blockType": "todo",
+        "position": 1.0,
+        "textContent": "Buy milk",
+        "blockProperties": {
+          "isChecked": false
         }
       }
     }

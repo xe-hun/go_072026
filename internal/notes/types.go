@@ -16,8 +16,8 @@ type NoteResponse struct {
 	OwnerID uuid.UUID `json:"ownerId"`
 	// Title is stored as a normal column for querying/display.
 	Title string `json:"title"`
-	// Metadata contains optional note-level JSONB properties.
-	Metadata json.RawMessage `json:"metadata"`
+	// NoteProperties contains optional note-level JSONB properties.
+	NoteProperties json.RawMessage `json:"noteProperties"`
 	// CurrentVersion is the server-authoritative note version.
 	CurrentVersion int64     `json:"currentVersion"`
 	CreatedAt      time.Time `json:"createdAt"`
@@ -40,10 +40,10 @@ type BlockResponse struct {
 	TextContent string `json:"textContent"`
 	// Position is the string-based fractional ordering key.
 	Position string `json:"position"`
-	// Properties contains type-specific JSONB fields.
-	Properties json.RawMessage `json:"properties"`
-	CreatedAt  time.Time       `json:"createdAt"`
-	UpdatedAt  time.Time       `json:"updatedAt"`
+	// BlockProperties contains type-specific JSONB fields.
+	BlockProperties json.RawMessage `json:"blockProperties"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
 	// DeletedAt is present for tombstoned blocks.
 	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 }

@@ -34,8 +34,6 @@ type ClientOperation struct {
 	OperationID uuid.UUID `json:"operationId"`
 	// NoteID is the note being created or mutated.
 	NoteID uuid.UUID `json:"noteId"`
-	// BlockID is required for block operations and omitted for note operations.
-	BlockID *uuid.UUID `json:"blockId,omitempty"`
 	// OperationType is the concrete operation name.
 	OperationType string `json:"operationType"`
 	// Sequence orders client operations within a note batch.
@@ -92,7 +90,7 @@ type NoteSnapshot struct {
 	ID             uuid.UUID       `json:"id"`
 	OwnerID        uuid.UUID       `json:"ownerId"`
 	Title          string          `json:"title"`
-	Metadata       json.RawMessage `json:"metadata"`
+	NoteProperties json.RawMessage `json:"noteProperties"`
 	CurrentVersion int64           `json:"currentVersion"`
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
@@ -102,15 +100,15 @@ type NoteSnapshot struct {
 
 // BlockSnapshot is one block inside a current note snapshot.
 type BlockSnapshot struct {
-	ID          uuid.UUID       `json:"id"`
-	NoteID      uuid.UUID       `json:"noteId"`
-	BlockType   string          `json:"blockType"`
-	TextContent string          `json:"textContent"`
-	Position    string          `json:"position"`
-	Properties  json.RawMessage `json:"properties"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
-	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
+	ID              uuid.UUID       `json:"id"`
+	NoteID          uuid.UUID       `json:"noteId"`
+	BlockType       string          `json:"blockType"`
+	TextContent     string          `json:"textContent"`
+	Position        string          `json:"position"`
+	BlockProperties json.RawMessage `json:"blockProperties"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+	DeletedAt       *time.Time      `json:"deletedAt,omitempty"`
 }
 
 // PulledChange is a change-log row sent to another device during pull sync.

@@ -32,8 +32,8 @@ type SnapshotNote struct {
 	ID uuid.UUID `json:"id"`
 	// Title is the note title at snapshot time.
 	Title string `json:"title"`
-	// Metadata stores note-level JSONB data.
-	Metadata json.RawMessage `json:"metadata"`
+	// NoteProperties stores note-level JSONB data.
+	NoteProperties json.RawMessage `json:"noteProperties"`
 	// Version is the note version represented by this snapshot.
 	Version int64 `json:"version"`
 	// DeletedAt is encoded as a string so the snapshot JSON is provider-neutral.
@@ -50,8 +50,8 @@ type SnapshotBlock struct {
 	Text string `json:"text"`
 	// Position is the fractional ordering key.
 	Position string `json:"position"`
-	// Properties stores block-type-specific JSONB data.
-	Properties json.RawMessage `json:"properties"`
+	// BlockProperties stores block-type-specific JSONB data.
+	BlockProperties json.RawMessage `json:"blockProperties"`
 	// DeletedAt is present for block tombstones.
 	DeletedAt *string `json:"deletedAt"`
 }
@@ -94,22 +94,22 @@ func BuildSnapshotDocument(doc store.NoteDocument) SnapshotDocument {
 	blocks := make([]SnapshotBlock, 0, len(doc.Blocks))
 	for _, block := range doc.Blocks {
 		blocks = append(blocks, SnapshotBlock{
-			ID:         block.ID,
-			Type:       block.BlockType,
-			Text:       block.TextContent,
-			Position:   block.Position,
-			Properties: store.NormalizeJSON(block.Properties),
-			DeletedAt:  formatTimePtr(store.TimePtr(block.DeletedAt)),
+			ID:              block.ID,
+			Type:            block.BlockType,
+			Text:            block.TextContent,
+			Position:        block.Position,
+			BlockProperties: store.NormalizeJSON(block.BlockProperties),
+			DeletedAt:       formatTimePtr(store.TimePtr(block.DeletedAt)),
 		})
 	}
 	return SnapshotDocument{
 		SchemaVersion: 1,
 		Note: SnapshotNote{
-			ID:        doc.Note.ID,
-			Title:     doc.Note.Title,
-			Metadata:  store.NormalizeJSON(doc.Note.Metadata),
-			Version:   doc.Note.CurrentVersion,
-			DeletedAt: deletedAt,
+			ID:             doc.Note.ID,
+			Title:          doc.Note.Title,
+			NoteProperties: store.NormalizeJSON(doc.Note.NoteProperties),
+			Version:        doc.Note.CurrentVersion,
+			DeletedAt:      deletedAt,
 		},
 		Blocks: blocks,
 	}

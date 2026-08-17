@@ -21,7 +21,7 @@ type Note struct {
 	ID             pgtype.UUID        `json:"id"`
 	OwnerID        pgtype.UUID        `json:"owner_id"`
 	Title          string             `json:"title"`
-	Metadata       []byte             `json:"metadata"`
+	NoteProperties []byte             `json:"note_properties"`
 	CurrentVersion int64              `json:"current_version"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -29,15 +29,15 @@ type Note struct {
 }
 
 type NoteBlock struct {
-	ID          pgtype.UUID        `json:"id"`
-	NoteID      pgtype.UUID        `json:"note_id"`
-	BlockType   string             `json:"block_type"`
-	TextContent string             `json:"text_content"`
-	Position    string             `json:"position"`
-	Properties  []byte             `json:"properties"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	ID              pgtype.UUID        `json:"id"`
+	NoteID          pgtype.UUID        `json:"note_id"`
+	BlockType       string             `json:"block_type"`
+	TextContent     string             `json:"text_content"`
+	Position        string             `json:"position"`
+	BlockProperties []byte             `json:"block_properties"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type NoteChange struct {

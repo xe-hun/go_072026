@@ -261,11 +261,11 @@ func cloneNoteDocument(document *store.NoteDocument) *store.NoteDocument {
 		return nil
 	}
 	clone := *document
-	clone.Note.Metadata = append(json.RawMessage(nil), document.Note.Metadata...)
+	clone.Note.NoteProperties = append(json.RawMessage(nil), document.Note.NoteProperties...)
 	clone.Blocks = make([]store.NoteBlock, len(document.Blocks))
 	for i, block := range document.Blocks {
 		clone.Blocks[i] = block
-		clone.Blocks[i].Properties = append(json.RawMessage(nil), block.Properties...)
+		clone.Blocks[i].BlockProperties = append(json.RawMessage(nil), block.BlockProperties...)
 	}
 	return &clone
 }
@@ -303,7 +303,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 	case OperationCreateBlock:
 		accepted, rejected, err := s.createBlock(ctx, tx, ownerID, deviceID, document, op, fields)
 		return document, accepted, rejected, rejected == nil, err
-	case OperationDeleteBlock, OperationModifyBlockProperty:
+	case OperationDeleteBlock, OperationModifyBlock:
 		accepted, rejected, err := s.mutateBlock(ctx, tx, ownerID, deviceID, document, op, fields)
 		return document, accepted, rejected, rejected == nil, err
 	case OperationCreateCategory:
@@ -403,28 +403,122 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 		return document, nil, &rejected, nil
 	}
 	if !ok {
-		title = ""
+		rejected := rejectedInvalid(op, "title is required.")
+		return document, nil, &rejected, nil
 	}
-	metadata, ok, err := getObjectField(fields, "metadata")
+	noteProperties, ok, err := getObjectField(fields, "noteProperties")
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return document, nil, &rejected, nil
 	}
 	if !ok {
-		metadata = json.RawMessage(`{}`)
+		rejected := rejectedInvalid(op, "noteProperties is required.")
+		return document, nil, &rejected, nil
+	}
+	blockValues, ok, err := getArrayField(fields, "blocks")
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return document, nil, &rejected, nil
+	}
+	if !ok {
+		rejected := rejectedInvalid(op, "blocks is required.")
+		return document, nil, &rejected, nil
+	}
+	blocks := make([]store.NoteBlock, 0, len(blockValues))
+	blockIDs := make(map[uuid.UUID]struct{}, len(blockValues))
+	positions := make(map[string]struct{}, len(blockValues))
+	for i, rawBlock := range blockValues {
+		blockFields, err := decodeObjectFields(rawBlock, "blocks["+strconv.Itoa(i)+"]")
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return document, nil, &rejected, nil
+		}
+		block, err := decodeBlockPayload(blockFields, op.NoteID)
+		if err != nil {
+			rejected := rejectedInvalid(op, err.Error())
+			return document, nil, &rejected, nil
+		}
+		if _, exists := blockIDs[block.ID]; exists {
+			rejected := rejectedInvalid(op, "blocks contains duplicate ids.")
+			return document, nil, &rejected, nil
+		}
+		if _, exists := positions[block.Position]; exists {
+			rejected := rejectedInvalid(op, "blocks contains duplicate positions.")
+			return document, nil, &rejected, nil
+		}
+		blockIDs[block.ID] = struct{}{}
+		positions[block.Position] = struct{}{}
+		blocks = append(blocks, block)
 	}
 	updated := &store.NoteDocument{Note: store.Note{
 		ID:             op.NoteID,
 		OwnerID:        ownerID,
 		Title:          title,
-		Metadata:       metadata,
+		NoteProperties: noteProperties,
 		CurrentVersion: 0,
-	}}
+	}, Blocks: blocks}
 	accepted, _, err := s.acceptOperationChange(ctx, tx, ownerID, deviceID, updated, op, nil)
 	if err != nil {
 		return updated, nil, nil, err
 	}
 	return updated, accepted, nil, nil
+}
+
+func decodeBlockPayload(fields map[string]json.RawMessage, noteID uuid.UUID) (store.NoteBlock, error) {
+	id, ok, err := getUUIDField(fields, "id")
+	if err != nil {
+		return store.NoteBlock{}, err
+	}
+	if !ok || id == uuid.Nil {
+		return store.NoteBlock{}, errors.New("id is required")
+	}
+
+	blockType, ok, err := getStringField(fields, "blockType")
+	if err != nil {
+		return store.NoteBlock{}, err
+	}
+	if !ok {
+		return store.NoteBlock{}, errors.New("blockType is required")
+	}
+	if err := validateBlockType(blockType); err != nil {
+		return store.NoteBlock{}, err
+	}
+
+	position, ok, err := getFloatField(fields, "position")
+	if err != nil {
+		return store.NoteBlock{}, err
+	}
+	if !ok {
+		return store.NoteBlock{}, errors.New("position is required")
+	}
+	if position < 0 {
+		return store.NoteBlock{}, errors.New("position must be greater than or equal to zero")
+	}
+
+	textContent, ok, err := getStringField(fields, "textContent")
+	if err != nil {
+		return store.NoteBlock{}, err
+	}
+	if !ok {
+		return store.NoteBlock{}, errors.New("textContent is required")
+	}
+
+	blockProperties, ok, err := getObjectField(fields, "blockProperties")
+	if err != nil {
+		return store.NoteBlock{}, err
+	}
+	if !ok {
+		blockProperties = json.RawMessage(`{}`)
+	}
+
+	return store.NoteBlock{
+		ID:              id,
+		NoteID:          noteID,
+		BlockType:       blockType,
+		TextContent:     textContent,
+		Position:        strconv.FormatFloat(position, 'f', -1, 64),
+		BlockProperties: blockProperties,
+	}, nil
 }
 
 // mutateNote applies update/delete operations for existing notes.
@@ -440,7 +534,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 
 	switch op.OperationType {
 	case OperationModifyNoteProperty:
-		metadataRaw, ok, err := getObjectField(fields, "metaData")
+		notePropertiesRaw, ok, err := getObjectField(fields, "noteProperties")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
@@ -449,7 +543,7 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 			rejected := rejectedInvalid(op, "modify_note_property must include at least one property.")
 			return nil, &rejected, nil
 		}
-		changes, err := decodeObjectFields(metadataRaw, "metaData")
+		changes, err := decodeObjectFields(notePropertiesRaw, "noteProperties")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
@@ -458,12 +552,12 @@ func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, devi
 			rejected := rejectedInvalid(op, "modify_note_property must include at least one property.")
 			return nil, &rejected, nil
 		}
-		metadata, err := mergeJSONProperties(document.Note.Metadata, changes, "metadata")
+		noteProperties, err := mergeJSONProperties(document.Note.NoteProperties, changes, "noteProperties")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		document.Note.Metadata = metadata
+		document.Note.NoteProperties = noteProperties
 		return s.acceptOperationChange(ctx, tx, ownerID, deviceID, document, op, nil)
 
 	case OperationModifyNoteTitle:
@@ -509,60 +603,10 @@ func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ow
 
 // createBlock applies create_block to the in-memory note document.
 func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
-	position, ok, err := getIntField(fields, "position")
+	block, err := decodeBlockPayload(fields, op.NoteID)
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
-	}
-	if !ok {
-		rejected := rejectedInvalid(op, "position is required.")
-		return nil, &rejected, nil
-	}
-	if position < 0 {
-		rejected := rejectedInvalid(op, "position must be greater than or equal to zero.")
-		return nil, &rejected, nil
-	}
-	blockRaw, ok, err := getObjectField(fields, "block")
-	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	if !ok {
-		rejected := rejectedInvalid(op, "block is required.")
-		return nil, &rejected, nil
-	}
-	blockFields, err := decodeObjectFields(blockRaw, "block")
-	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-
-	blockType, ok, err := getStringField(blockFields, "blockType")
-	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	if !ok {
-		rejected := rejectedInvalid(op, "block.blockType is required.")
-		return nil, &rejected, nil
-	}
-	if err := validateBlockType(blockType); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	text, ok, err := getStringField(blockFields, "textContent")
-	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-
-	properties, ok, err := getObjectField(blockFields, "properties")
-	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	if !ok {
-		properties = json.RawMessage(`{}`)
 	}
 	if document == nil {
 		rejected := rejectedNotFound(op, "Note not found.")
@@ -573,45 +617,50 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		return nil, &rejected, nil
 	}
 	for _, existing := range document.Blocks {
-		if existing.ID == *op.BlockID {
+		if existing.ID == block.ID {
 			rejected := rejectedInvalid(op, "block already exists.")
 			return nil, &rejected, nil
 		}
 	}
-	document.Blocks = append(document.Blocks, store.NoteBlock{
-		ID:          *op.BlockID,
-		NoteID:      op.NoteID,
-		BlockType:   blockType,
-		TextContent: text,
-		Position:    strconv.Itoa(position),
-		Properties:  properties,
-	})
-	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, document, op, op.BlockID)
+	document.Blocks = append(document.Blocks, block)
+	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, document, op, &block.ID)
 }
 
 // mutateBlock applies update/delete operations to the in-memory note document.
 func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, document *store.NoteDocument, op ClientOperation, fields map[string]json.RawMessage) (*AcceptedDTO, *RejectedDTO, error) {
 	var (
-		changedProperties map[string]json.RawMessage
-		textChange        TextChange
-		hasProperties     bool
-		hasText           bool
-		position          int
+		changedProperties  map[string]json.RawMessage
+		textChange         TextChange
+		hasBlockProperties bool
+		hasText            bool
+		blockID            uuid.UUID
 	)
 
-	if op.OperationType == OperationModifyBlockProperty {
-		changedPropertiesRaw, hasChangedProperties, err := getObjectField(fields, "changedProperties")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		if hasChangedProperties {
-			changedProperties, err = decodeObjectFields(changedPropertiesRaw, "changedProperties")
+	blockID, ok, err := getUUIDField(fields, "id")
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if !ok || blockID == uuid.Nil {
+		rejected := rejectedInvalid(op, "id is required.")
+		return nil, &rejected, nil
+	}
+
+	if op.OperationType == OperationModifyBlock {
+		var blockPropertiesRaw json.RawMessage
+		blockPropertiesRaw, hasBlockProperties = fields["blockProperties"]
+		if hasBlockProperties && !isJSONNull(blockPropertiesRaw) {
+			var err error
+			blockPropertiesRaw, _, err = getObjectField(fields, "blockProperties")
 			if err != nil {
 				rejected := rejectedInvalid(op, err.Error())
 				return nil, &rejected, nil
 			}
-			hasProperties = true
+			changedProperties, err = decodeObjectFields(blockPropertiesRaw, "blockProperties")
+			if err != nil {
+				rejected := rejectedInvalid(op, err.Error())
+				return nil, &rejected, nil
+			}
 		}
 		textDeltaRaw, hasTextDelta, err := getObjectField(fields, "textDelta")
 		if err != nil {
@@ -626,21 +675,8 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 			}
 			hasText = true
 		}
-		if (!hasProperties || len(changedProperties) == 0) && !hasText {
-			rejected := rejectedInvalid(op, "modify_block_property must include changedProperties or textDelta.")
-			return nil, &rejected, nil
-		}
-	}
-	if op.OperationType == OperationDeleteBlock {
-		var ok bool
-		var err error
-		position, ok, err = getIntField(fields, "position")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		if !ok || position < 0 {
-			rejected := rejectedInvalid(op, "position must be a non-negative integer.")
+		if !hasBlockProperties && !hasText {
+			rejected := rejectedInvalid(op, "modify_block must include blockProperties or textDelta.")
 			return nil, &rejected, nil
 		}
 	}
@@ -656,7 +692,7 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 
 	var block *store.NoteBlock
 	for i := range document.Blocks {
-		if document.Blocks[i].ID == *op.BlockID {
+		if document.Blocks[i].ID == blockID {
 			block = &document.Blocks[i]
 			break
 		}
@@ -665,13 +701,13 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		rejected := rejectedNotFound(op, "Block not found.")
 		return nil, &rejected, nil
 	}
-	if hasProperties {
-		properties, err := mergeJSONProperties(block.Properties, changedProperties, "properties")
+	if hasBlockProperties && len(changedProperties) > 0 {
+		blockProperties, err := mergeJSONProperties(block.BlockProperties, changedProperties, "blockProperties")
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
-		block.Properties = properties
+		block.BlockProperties = blockProperties
 	}
 	if hasText {
 		text, err := applyTextDelta(block.TextContent, textChange.Text, textChange.TextOperation, textChange.Index)
@@ -682,14 +718,10 @@ func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, dev
 		block.TextContent = text
 	}
 	if op.OperationType == OperationDeleteBlock {
-		if block.Position != strconv.Itoa(position) {
-			rejected := rejectedInvalid(op, "position does not match block.")
-			return nil, &rejected, nil
-		}
 		block.DeletedAt.Valid = true
 		block.DeletedAt.Time = time.Now().UTC()
 	}
-	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, document, op, op.BlockID)
+	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, document, op, &blockID)
 }
 
 // applyTextDelta applies an insert/delete to text using rune indexes. The
@@ -807,22 +839,22 @@ func mapNoteSnapshot(doc store.NoteDocument) NoteSnapshot {
 	blocks := make([]BlockSnapshot, 0, len(doc.Blocks))
 	for _, block := range doc.Blocks {
 		blocks = append(blocks, BlockSnapshot{
-			ID:          block.ID,
-			NoteID:      block.NoteID,
-			BlockType:   block.BlockType,
-			TextContent: block.TextContent,
-			Position:    block.Position,
-			Properties:  store.NormalizeJSON(block.Properties),
-			CreatedAt:   block.CreatedAt,
-			UpdatedAt:   block.UpdatedAt,
-			DeletedAt:   store.TimePtr(block.DeletedAt),
+			ID:              block.ID,
+			NoteID:          block.NoteID,
+			BlockType:       block.BlockType,
+			TextContent:     block.TextContent,
+			Position:        block.Position,
+			BlockProperties: store.NormalizeJSON(block.BlockProperties),
+			CreatedAt:       block.CreatedAt,
+			UpdatedAt:       block.UpdatedAt,
+			DeletedAt:       store.TimePtr(block.DeletedAt),
 		})
 	}
 	return NoteSnapshot{
 		ID:             doc.Note.ID,
 		OwnerID:        doc.Note.OwnerID,
 		Title:          doc.Note.Title,
-		Metadata:       store.NormalizeJSON(doc.Note.Metadata),
+		NoteProperties: store.NormalizeJSON(doc.Note.NoteProperties),
 		CurrentVersion: doc.Note.CurrentVersion,
 		CreatedAt:      doc.Note.CreatedAt,
 		UpdatedAt:      doc.Note.UpdatedAt,
