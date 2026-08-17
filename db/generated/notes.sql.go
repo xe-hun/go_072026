@@ -69,6 +69,102 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) error {
 	return err
 }
 
+const deleteBlock = `-- name: DeleteBlock :one
+UPDATE note_blocks
+SET updated_at = now(),
+    deleted_at = now()
+WHERE id = $1
+  AND note_id = $2
+RETURNING id, note_id, block_type, text_content, position, block_properties, created_at, updated_at, deleted_at
+`
+
+type DeleteBlockParams struct {
+	ID     pgtype.UUID `json:"id"`
+	NoteID pgtype.UUID `json:"note_id"`
+}
+
+// Soft-deletes one block directly and returns its resulting state.
+func (q *Queries) DeleteBlock(ctx context.Context, arg DeleteBlockParams) (NoteBlock, error) {
+	row := q.db.QueryRow(ctx, deleteBlock, arg.ID, arg.NoteID)
+	var i NoteBlock
+	err := row.Scan(
+		&i.ID,
+		&i.NoteID,
+		&i.BlockType,
+		&i.TextContent,
+		&i.Position,
+		&i.BlockProperties,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const deleteNote = `-- name: DeleteNote :one
+UPDATE notes
+SET updated_at = now(),
+    deleted_at = now()
+WHERE id = $1
+  AND owner_id = $2
+  AND current_version = $3
+RETURNING id, owner_id, title, note_properties, current_version, created_at, updated_at, deleted_at
+`
+
+type DeleteNoteParams struct {
+	ID             pgtype.UUID `json:"id"`
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	CurrentVersion int64       `json:"current_version"`
+}
+
+// Soft-deletes a note only when its expected base version still matches.
+func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) (Note, error) {
+	row := q.db.QueryRow(ctx, deleteNote, arg.ID, arg.OwnerID, arg.CurrentVersion)
+	var i Note
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Title,
+		&i.NoteProperties,
+		&i.CurrentVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getBlockForNoteForUpdate = `-- name: GetBlockForNoteForUpdate :one
+SELECT id, note_id, block_type, text_content, position, block_properties, created_at, updated_at, deleted_at
+FROM note_blocks
+WHERE id = $1
+  AND note_id = $2
+FOR UPDATE
+`
+
+type GetBlockForNoteForUpdateParams struct {
+	ID     pgtype.UUID `json:"id"`
+	NoteID pgtype.UUID `json:"note_id"`
+}
+
+// Reads and locks one block for a targeted block mutation.
+func (q *Queries) GetBlockForNoteForUpdate(ctx context.Context, arg GetBlockForNoteForUpdateParams) (NoteBlock, error) {
+	row := q.db.QueryRow(ctx, getBlockForNoteForUpdate, arg.ID, arg.NoteID)
+	var i NoteBlock
+	err := row.Scan(
+		&i.ID,
+		&i.NoteID,
+		&i.BlockType,
+		&i.TextContent,
+		&i.Position,
+		&i.BlockProperties,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getNoteForOwner = `-- name: GetNoteForOwner :one
 SELECT id, owner_id, title, note_properties, current_version, created_at, updated_at, deleted_at
 FROM notes
@@ -111,7 +207,7 @@ type GetNoteForOwnerForUpdateParams struct {
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
-// Reads and locks the complete note before applying a note batch.
+// Reads and locks the note row before applying a note batch.
 func (q *Queries) GetNoteForOwnerForUpdate(ctx context.Context, arg GetNoteForOwnerForUpdateParams) (Note, error) {
 	row := q.db.QueryRow(ctx, getNoteForOwnerForUpdate, arg.ID, arg.OwnerID)
 	var i Note

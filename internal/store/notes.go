@@ -19,8 +19,18 @@ func (s *Store) GetNoteForOwner(ctx context.Context, noteID, ownerID uuid.UUID) 
 	return fromDBNote(note), mapNoRows(err)
 }
 
+// GetNoteForOwnerForUpdate locks and returns one note row for a targeted
+// operation.
+func (s *Store) GetNoteForOwnerForUpdate(ctx context.Context, noteID, ownerID uuid.UUID) (Note, error) {
+	note, err := s.q.GetNoteForOwnerForUpdate(ctx, db.GetNoteForOwnerForUpdateParams{
+		ID:      pgUUID(noteID),
+		OwnerID: pgUUID(ownerID),
+	})
+	return fromDBNote(note), mapNoRows(err)
+}
+
 // GetNoteDocumentForOwnerForUpdate locks and loads one complete note document
-// for an atomic operation batch.
+// for read responses and rejection snapshots.
 func (s *Store) GetNoteDocumentForOwnerForUpdate(ctx context.Context, noteID, ownerID uuid.UUID) (NoteDocument, error) {
 	note, err := s.q.GetNoteForOwnerForUpdate(ctx, db.GetNoteForOwnerForUpdateParams{
 		ID:      pgUUID(noteID),
@@ -34,6 +44,15 @@ func (s *Store) GetNoteDocumentForOwnerForUpdate(ctx context.Context, noteID, ow
 		return NoteDocument{}, err
 	}
 	return NoteDocument{Note: fromDBNote(note), Blocks: blocks}, nil
+}
+
+// GetBlockForNoteForUpdate locks one block for a targeted block mutation.
+func (s *Store) GetBlockForNoteForUpdate(ctx context.Context, blockID, noteID uuid.UUID) (NoteBlock, error) {
+	block, err := s.q.GetBlockForNoteForUpdate(ctx, db.GetBlockForNoteForUpdateParams{
+		ID:     pgUUID(blockID),
+		NoteID: pgUUID(noteID),
+	})
+	return fromDBBlock(block), mapNoRows(err)
 }
 
 // ListBlocksForNote returns all blocks for a note in stable position order,
@@ -73,6 +92,16 @@ func (s *Store) UpdateNoteState(ctx context.Context, note Note) error {
 	})
 }
 
+// DeleteNote soft-deletes a note when the caller's base version is current.
+func (s *Store) DeleteNote(ctx context.Context, noteID, ownerID uuid.UUID, expectedVersion int64) (Note, error) {
+	note, err := s.q.DeleteNote(ctx, db.DeleteNoteParams{
+		ID:             pgUUID(noteID),
+		OwnerID:        pgUUID(ownerID),
+		CurrentVersion: expectedVersion,
+	})
+	return fromDBNote(note), mapNoRows(err)
+}
+
 // CreateBlock inserts a new block.
 func (s *Store) CreateBlock(ctx context.Context, block NoteBlock) error {
 	return s.q.CreateBlock(ctx, db.CreateBlockParams{
@@ -98,29 +127,13 @@ func (s *Store) UpdateBlockState(ctx context.Context, block NoteBlock) error {
 	})
 }
 
-// SaveNoteDocument persists a complete note document once its operation batch
-// has succeeded. A zero CreatedAt marks a note or block created in memory.
-func (s *Store) SaveNoteDocument(ctx context.Context, document NoteDocument) error {
-	if document.Note.CreatedAt.IsZero() {
-		if err := s.CreateNote(ctx, document.Note); err != nil {
-			return err
-		}
-	} else if err := s.UpdateNoteState(ctx, document.Note); err != nil {
-		return err
-	}
-
-	for _, block := range document.Blocks {
-		if block.CreatedAt.IsZero() {
-			if err := s.CreateBlock(ctx, block); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := s.UpdateBlockState(ctx, block); err != nil {
-			return err
-		}
-	}
-	return nil
+// DeleteBlock soft-deletes one block and returns its resulting state.
+func (s *Store) DeleteBlock(ctx context.Context, blockID, noteID uuid.UUID) (NoteBlock, error) {
+	block, err := s.q.DeleteBlock(ctx, db.DeleteBlockParams{
+		ID:     pgUUID(blockID),
+		NoteID: pgUUID(noteID),
+	})
+	return fromDBBlock(block), mapNoRows(err)
 }
 
 // GetNoteDocument fetches a note and its blocks for read endpoints and
