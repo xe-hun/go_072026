@@ -46,13 +46,14 @@ func TestEncodeSnapshotProducesStableChecksum(t *testing.T) {
 	}
 }
 
-// TestBuildSnapshotDocumentIncludesDeletedBlocks protects tombstone preservation
-// in full-note snapshots.
-func TestBuildSnapshotDocumentIncludesDeletedBlocks(t *testing.T) {
+// TestSnapshotDocumentFromEntityIncludesDeletedBlocks protects tombstone
+// preservation in full-note snapshots.
+func TestSnapshotDocumentFromEntityIncludesDeletedBlocks(t *testing.T) {
 	deletedAt := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	noteID := uuid.New()
 	doc := store.NoteDocument{
 		Note: store.Note{
-			ID:             uuid.New(),
+			ID:             noteID,
 			OwnerID:        uuid.New(),
 			Title:          "Archive",
 			NoteProperties: json.RawMessage(`{}`),
@@ -61,7 +62,7 @@ func TestBuildSnapshotDocumentIncludesDeletedBlocks(t *testing.T) {
 		Blocks: []store.NoteBlock{
 			{
 				ID:              uuid.New(),
-				NoteID:          uuid.New(),
+				NoteID:          noteID,
 				BlockType:       "text",
 				TextContent:     "removed",
 				Position:        "a0",
@@ -71,7 +72,10 @@ func TestBuildSnapshotDocumentIncludesDeletedBlocks(t *testing.T) {
 		},
 	}
 
-	snapshot := BuildSnapshotDocument(doc)
+	var snapshot SnapshotDocument
+	if err := snapshot.FromEntity(doc); err != nil {
+		t.Fatal(err)
+	}
 	if len(snapshot.Blocks) != 1 {
 		t.Fatalf("blocks = %d, want 1", len(snapshot.Blocks))
 	}

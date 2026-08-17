@@ -31,7 +31,11 @@ func (s *Service) Get(ctx context.Context, ownerID, noteID uuid.UUID) (NoteRespo
 	if err != nil {
 		return NoteResponse{}, err
 	}
-	return mapNoteDocument(doc), nil
+	var response NoteResponse
+	if err := response.FromEntity(doc); err != nil {
+		return NoteResponse{}, err
+	}
+	return response, nil
 }
 
 // LatestSnapshot returns the newest stored snapshot for a note.
@@ -43,45 +47,9 @@ func (s *Service) LatestSnapshot(ctx context.Context, ownerID, noteID uuid.UUID)
 	if err != nil {
 		return SnapshotResponse{}, err
 	}
-	return SnapshotResponse{
-		ID:             snapshot.ID,
-		NoteID:         snapshot.NoteID,
-		OwnerID:        snapshot.OwnerID,
-		Version:        snapshot.Version,
-		SnapshotFormat: snapshot.SnapshotFormat,
-		SchemaVersion:  snapshot.SchemaVersion,
-		SnapshotData:   snapshot.SnapshotData,
-		Checksum:       snapshot.Checksum,
-		CreatedAt:      snapshot.CreatedAt,
-	}, nil
-}
-
-// mapNoteDocument converts the store's database-oriented note document into the
-// public JSON response shape.
-func mapNoteDocument(doc store.NoteDocument) NoteResponse {
-	blocks := make([]BlockResponse, 0, len(doc.Blocks))
-	for _, block := range doc.Blocks {
-		blocks = append(blocks, BlockResponse{
-			ID:              block.ID,
-			NoteID:          block.NoteID,
-			BlockType:       block.BlockType,
-			TextContent:     block.TextContent,
-			Position:        block.Position,
-			BlockProperties: store.NormalizeJSON(block.BlockProperties),
-			CreatedAt:       block.CreatedAt,
-			UpdatedAt:       block.UpdatedAt,
-			DeletedAt:       store.TimePtr(block.DeletedAt),
-		})
+	var response SnapshotResponse
+	if err := response.FromEntity(snapshot); err != nil {
+		return SnapshotResponse{}, err
 	}
-	return NoteResponse{
-		ID:             doc.Note.ID,
-		OwnerID:        doc.Note.OwnerID,
-		Title:          doc.Note.Title,
-		NoteProperties: store.NormalizeJSON(doc.Note.NoteProperties),
-		CurrentVersion: doc.Note.CurrentVersion,
-		CreatedAt:      doc.Note.CreatedAt,
-		UpdatedAt:      doc.Note.UpdatedAt,
-		DeletedAt:      store.TimePtr(doc.Note.DeletedAt),
-		Blocks:         blocks,
-	}
+	return response, nil
 }

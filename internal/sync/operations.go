@@ -222,37 +222,6 @@ func isJSONNull(raw json.RawMessage) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
-// validateOperationShape checks operation-level invariants before any database
-// rows are locked or mutated.
-func validateOperationShape(op ClientOperation) error {
-	if op.OperationID == uuid.Nil {
-		return errors.New("operationId is required")
-	}
-	if op.Sequence < 0 {
-		return errors.New("sequence must be greater than or equal to zero")
-	}
-	switch op.OperationType {
-	case OperationCreateCategory, OperationDeleteCategory, OperationModifyCategory:
-		if op.NoteID != uuid.Nil {
-			return errors.New("noteId is not allowed for category operations")
-		}
-	case OperationCreateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
-		if op.NoteID == uuid.Nil {
-			return errors.New("noteId is required")
-		}
-	case OperationCreateBlock, OperationDeleteBlock, OperationModifyBlock:
-		if op.NoteID == uuid.Nil {
-			return errors.New("noteId is required")
-		}
-	default:
-		return errors.New("operationType is unsupported")
-	}
-	if normalizeChangeFormat(op.ChangeFormat) != ChangeFormatStructuredV1 {
-		return errors.New("changeFormat is unsupported")
-	}
-	return nil
-}
-
 // validateBlockType enforces the block type allow-list.
 func validateBlockType(blockType string) error {
 	if _, ok := allowedBlockTypes[blockType]; !ok {

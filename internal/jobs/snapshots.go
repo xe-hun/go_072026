@@ -70,7 +70,10 @@ func CreateSnapshot(ctx context.Context, tx *store.Store, payload store.Snapshot
 		return store.NoteSnapshot{}, errors.New("note version is behind snapshot job expectation")
 	}
 
-	snapshotDoc := BuildSnapshotDocument(doc)
+	var snapshotDoc SnapshotDocument
+	if err := snapshotDoc.FromEntity(doc); err != nil {
+		return store.NoteSnapshot{}, err
+	}
 	encoded, checksum, err := EncodeSnapshot(snapshotDoc)
 	if err != nil {
 		return store.NoteSnapshot{}, err
@@ -87,32 +90,53 @@ func CreateSnapshot(ctx context.Context, tx *store.Store, payload store.Snapshot
 	})
 }
 
-// BuildSnapshotDocument converts the current store document into the stable JSON
-// snapshot shape.
-func BuildSnapshotDocument(doc store.NoteDocument) SnapshotDocument {
-	deletedAt := formatTimePtr(store.TimePtr(doc.Note.DeletedAt))
-	blocks := make([]SnapshotBlock, 0, len(doc.Blocks))
-	for _, block := range doc.Blocks {
-		blocks = append(blocks, SnapshotBlock{
-			ID:              block.ID,
-			Type:            block.BlockType,
-			Text:            block.TextContent,
-			Position:        block.Position,
-			BlockProperties: store.NormalizeJSON(block.BlockProperties),
-			DeletedAt:       formatTimePtr(store.TimePtr(block.DeletedAt)),
-		})
+// FromEntity converts the current store document into the stable JSON snapshot
+// shape and validates the identifiers required by that shape.
+func (s *SnapshotDocument) FromEntity(doc store.NoteDocument) error {
+	if doc.Note.ID == uuid.Nil || doc.Note.OwnerID == uuid.Nil {
+		return errors.New("snapshot note must contain valid identifiers")
 	}
-	return SnapshotDocument{
+
+	blocks := make([]SnapshotBlock, 0, len(doc.Blocks))
+	for _, entity := range doc.Blocks {
+		if entity.NoteID != doc.Note.ID {
+			return errors.New("snapshot block does not belong to snapshot note")
+		}
+		var block SnapshotBlock
+		if err := block.FromEntity(entity); err != nil {
+			return err
+		}
+		blocks = append(blocks, block)
+	}
+
+	*s = SnapshotDocument{
 		SchemaVersion: 1,
 		Note: SnapshotNote{
 			ID:             doc.Note.ID,
 			Title:          doc.Note.Title,
 			NoteProperties: store.NormalizeJSON(doc.Note.NoteProperties),
 			Version:        doc.Note.CurrentVersion,
-			DeletedAt:      deletedAt,
+			DeletedAt:      formatTimePtr(store.TimePtr(doc.Note.DeletedAt)),
 		},
 		Blocks: blocks,
 	}
+	return nil
+}
+
+// FromEntity converts a store block into the snapshot block shape.
+func (b *SnapshotBlock) FromEntity(entity store.NoteBlock) error {
+	if entity.ID == uuid.Nil || entity.NoteID == uuid.Nil {
+		return errors.New("snapshot block must contain valid identifiers")
+	}
+	*b = SnapshotBlock{
+		ID:              entity.ID,
+		Type:            entity.BlockType,
+		Text:            entity.TextContent,
+		Position:        entity.Position,
+		BlockProperties: store.NormalizeJSON(entity.BlockProperties),
+		DeletedAt:       formatTimePtr(store.TimePtr(entity.DeletedAt)),
+	}
+	return nil
 }
 
 // EncodeSnapshot marshals the snapshot and computes a SHA-256 checksum over the

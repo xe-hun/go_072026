@@ -42,11 +42,15 @@ The API process is stateless. Durable state lives in PostgreSQL. Multiple API in
 
 `internal/httpapi` contains API response helpers, request validation, request ID context helpers, and the consistent JSON error envelope.
 
-`internal/devices` handles device registration, listing, and revocation.
+`internal/devices` handles device registration, listing, and revocation. Its
+models own request/entity conversions and device validation.
 
 `internal/notes` handles direct current-state reads and latest snapshot reads.
+Note and block models own entity-to-response conversion and entity validation.
 
-`internal/sync` contains the main offline sync protocol, operation validation, idempotency, version conflict handling, current-state mutations, change-log writes, pull pagination, and snapshot job enqueueing.
+`internal/sync` contains the main offline sync protocol, operation model
+conversion/validation, idempotency, version conflict handling, current-state
+mutations, change-log writes, pull pagination, and snapshot job enqueueing.
 
 `internal/store` is the persistence boundary. It wraps `pgxpool`, coordinates transactions, converts generated sqlc models into app-facing models, and exposes store methods used by services.
 

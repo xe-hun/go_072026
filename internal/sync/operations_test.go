@@ -15,7 +15,7 @@ func TestValidateOperationShapeDoesNotRequireBlockID(t *testing.T) {
 		NoteID:        uuid.New(),
 		OperationType: OperationModifyBlock,
 	}
-	if err := validateOperationShape(op); err != nil {
+	if err := op.Validate(); err != nil {
 		t.Fatalf("expected missing blockId to pass validation: %v", err)
 	}
 }
@@ -25,10 +25,10 @@ func TestValidateOperationShapeDoesNotRequireBlockID(t *testing.T) {
 func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {
 	categoryOperations := []string{OperationCreateCategory, OperationDeleteCategory, OperationModifyCategory}
 	for _, operationType := range categoryOperations {
-		if err := validateOperationShape(ClientOperation{
+		if err := (ClientOperation{
 			OperationID:   uuid.New(),
 			OperationType: operationType,
-		}); err != nil {
+		}).Validate(); err != nil {
 			t.Fatalf("expected %s to pass validation: %v", operationType, err)
 		}
 	}
@@ -38,18 +38,18 @@ func TestValidateOperationShapeAcceptsNewOperationTypes(t *testing.T) {
 		{OperationID: uuid.New(), NoteID: uuid.New(), OperationType: OperationModifyBlock},
 	}
 	for _, op := range ops {
-		if err := validateOperationShape(op); err != nil {
+		if err := op.Validate(); err != nil {
 			t.Fatalf("expected %s to pass validation: %v", op.OperationType, err)
 		}
 	}
 }
 
 func TestValidateOperationShapeRejectsNoteIDForCategory(t *testing.T) {
-	if err := validateOperationShape(ClientOperation{
+	if err := (ClientOperation{
 		OperationID:   uuid.New(),
 		NoteID:        uuid.New(),
 		OperationType: OperationCreateCategory,
-	}); err == nil {
+	}).Validate(); err == nil {
 		t.Fatal("expected category operation with noteId to fail validation")
 	}
 }
