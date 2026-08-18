@@ -59,3 +59,42 @@ func TestOperationFromRequestValidatesEnvelopeAndPayload(t *testing.T) {
 		t.Fatalf("decoded fields = %d, want 1", len(model.Fields))
 	}
 }
+
+func TestBlockModelFromCreateOperationUsesBlockField(t *testing.T) {
+	blockID := uuid.New()
+	var model BlockModel
+	err := model.FromCreateOperation(json.RawMessage(`{
+		"block": {
+			"id":"` + blockID.String() + `",
+			"blockType":"text",
+			"position":1,
+			"textContent":"hello",
+			"blockProperties":{}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.ID != blockID || model.TextContent != "hello" {
+		t.Fatalf("unexpected block model: %+v", model)
+	}
+}
+
+func TestBlockMutationFromRequestUsesChangedPropertiesAndTextDelta(t *testing.T) {
+	blockID := uuid.New()
+	var mutation BlockMutation
+	err := mutation.FromRequest(json.RawMessage(`{
+		"id":"`+blockID.String()+`",
+		"changedProperties":{"checked":true},
+		"textDelta":{"textOperation":"insert","index":0,"text":"x"}
+	}`), OperationModifyBlock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mutation.ID != blockID || !mutation.HasProperties || !mutation.HasTextChange {
+		t.Fatalf("unexpected block mutation: %+v", mutation)
+	}
+	if string(mutation.ChangedProperties["checked"]) != "true" {
+		t.Fatalf("changedProperties not decoded: %s", mutation.ChangedProperties["checked"])
+	}
+}

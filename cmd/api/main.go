@@ -113,8 +113,8 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	r.Use(apimw.Timeout(cfg.RequestTimeout))
 	r.Use(apimw.RateLimit(apimw.AllowAllLimiter{}))
 	r.Use(apimw.BodyLimit(cfg.MaxCompressedRequestBytes))
-	r.Use(apimw.GzipDecompress(cfg.MaxDecompressedRequestBytes))
-	r.Use(apimw.GzipResponse)
+	// r.Use(apimw.GzipDecompress(cfg.MaxDecompressedRequestBytes))
+	// r.Use(apimw.GzipResponse)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		// Health is process-only and does not touch PostgreSQL. It is suitable for

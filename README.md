@@ -96,8 +96,9 @@ include a per-note integer `sequence`; the server sorts by `noteId` and then
 - the next cursor
 
 `modify_note_property` writes the supplied `noteProperties` object into the
-note, `modify_note_title` receives a nested `textDelta`, and `modify_block`
-receives `blockProperties` plus an optional nested `textDelta`. Block IDs are
+note, `modify_note_title` receives a nested `textDelta`, `create_block` receives
+a nested `block`, and `modify_block` receives `changedProperties` plus an
+optional nested `textDelta`. Block IDs are
 inside each operation's `changeData`. `create_category`, `modify_category`, and `delete_category` use
 `{id,name}` or `{id}` payloads respectively; note categories are metadata,
 not note columns. Current state updates and change-log inserts happen inside

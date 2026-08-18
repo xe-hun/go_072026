@@ -164,13 +164,13 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 	if operationType != OperationModifyBlock {
 		return errors.New("unsupported block mutation")
 	}
-	propertiesRaw, hasProperties := fields["blockProperties"]
+	propertiesRaw, hasProperties := fields["changedProperties"]
 	if hasProperties && !isJSONNull(propertiesRaw) {
-		propertiesRaw, _, err = getObjectField(fields, "blockProperties")
+		propertiesRaw, _, err = getObjectField(fields, "changedProperties")
 		if err != nil {
 			return err
 		}
-		m.ChangedProperties, err = decodeObjectFields(propertiesRaw, "blockProperties")
+		m.ChangedProperties, err = decodeObjectFields(propertiesRaw, "changedProperties")
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 		m.HasTextChange = true
 	}
 	if !hasProperties && !m.HasTextChange {
-		return errors.New("modify_block must include blockProperties or textDelta")
+		return errors.New("modify_block must include changedProperties or textDelta")
 	}
 	m.HasProperties = hasProperties
 	return nil
@@ -277,6 +277,22 @@ type BlockModel struct {
 	Position        string
 	TextContent     string
 	BlockProperties json.RawMessage
+}
+
+// FromCreateOperation parses the create_block changeData wrapper.
+func (m *BlockModel) FromCreateOperation(raw json.RawMessage) error {
+	fields, err := decodeChangeObject(raw)
+	if err != nil {
+		return err
+	}
+	block, ok, err := getObjectField(fields, "block")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("create_block requires block")
+	}
+	return m.FromRequest(block)
 }
 
 // FromRequest parses and validates a direct block payload.

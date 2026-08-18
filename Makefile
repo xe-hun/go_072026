@@ -11,7 +11,7 @@ DEV_JWKS_ADDR ?= :8081
 .PHONY: db-up db-down db-reset migrate-up migrate-down migrate-version migrate-force dev-auth dev-jwks dev-auth-verify sqlc run-api run-worker test test-integration lint tidy
 
 db-up:
-	docker compose up -d postgres
+	docker compose up -d 
 
 db-down:
 	docker compose down

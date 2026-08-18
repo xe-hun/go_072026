@@ -369,9 +369,9 @@ Operation payloads use direct operation-specific objects:
 
 `modify_note_title` uses `{ "textDelta": { "textOperation": "insert",
 "index": 8, "text": " and bread" } }`.
-`create_block` uses a direct block object with `{ "id": "uuid", "blockType": "text", "position": 1.0, "textContent": "...", "blockProperties": {} }`,
+`create_block` uses `{ "block": { "id": "uuid", "blockType": "text", "position": 1.0, "textContent": "...", "blockProperties": {} } }`,
 `delete_block` uses `{ "id": "uuid" }`, and
-`modify_block` uses `blockProperties` and `textDelta` in the same direct object.
+`modify_block` uses `changedProperties` and `textDelta` in the same direct object.
 Category operations use `{ "id": "uuid", "name": "name" }`
 for create/modify and `{ "id": "uuid" }` for delete.
 

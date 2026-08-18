@@ -332,20 +332,32 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 	case OperationCreateNote:
 		accepted, rejected, err := s.createNote(ctx, tx, ownerID, deviceID, state, op)
 		return state, accepted, rejected, rejected == nil, err
-	case OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
-		accepted, rejected, err := s.mutateNote(ctx, tx, ownerID, deviceID, state, op)
+	case OperationDeleteNote:
+		accepted, rejected, err := s.deleteNote(ctx, tx, ownerID, deviceID, state, op)
+		return state, accepted, rejected, rejected == nil, err
+	case OperationModifyNoteProperty:
+		accepted, rejected, err := s.modifyNoteProperty(ctx, tx, ownerID, deviceID, state, op)
+		return state, accepted, rejected, rejected == nil, err
+	case OperationModifyNoteTitle:
+		accepted, rejected, err := s.modifyNoteTitle(ctx, tx, ownerID, deviceID, state, op)
 		return state, accepted, rejected, rejected == nil, err
 	case OperationCreateBlock:
 		accepted, rejected, err := s.createBlock(ctx, tx, ownerID, deviceID, state, op)
 		return state, accepted, rejected, rejected == nil, err
-	case OperationDeleteBlock, OperationModifyBlock:
-		accepted, rejected, err := s.mutateBlock(ctx, tx, ownerID, deviceID, state, op)
+	case OperationDeleteBlock:
+		accepted, rejected, err := s.deleteBlock(ctx, tx, ownerID, deviceID, state, op)
+		return state, accepted, rejected, rejected == nil, err
+	case OperationModifyBlock:
+		accepted, rejected, err := s.modifyBlock(ctx, tx, ownerID, deviceID, state, op)
 		return state, accepted, rejected, rejected == nil, err
 	case OperationCreateCategory:
 		accepted, rejected, err := s.createCategory(ctx, tx, ownerID, deviceID, op)
 		return state, accepted, rejected, rejected == nil, err
-	case OperationDeleteCategory, OperationModifyCategory:
-		accepted, rejected, err := s.mutateCategory(ctx, tx, ownerID, deviceID, op)
+	case OperationDeleteCategory:
+		accepted, rejected, err := s.deleteCategory(ctx, tx, ownerID, deviceID, op)
+		return state, accepted, rejected, rejected == nil, err
+	case OperationModifyCategory:
+		accepted, rejected, err := s.modifyCategory(ctx, tx, ownerID, deviceID, op)
 		return state, accepted, rejected, rejected == nil, err
 	default:
 		rejected := rejectedInvalid(op, "operationType is unsupported.")
@@ -370,9 +382,32 @@ func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, 
 	return &accepted, nil, nil
 }
 
-func (s *Service) mutateCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
-	if err := category.FromRequest(op.ChangeData, op.OperationType == OperationModifyCategory); err != nil {
+	if err := category.FromRequest(op.ChangeData, false); err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if err := tx.LockCategoryForOwner(ctx, category.ID, ownerID); errors.Is(err, store.ErrNotFound) {
+		rejected := rejectedNotFound(op, "Category not found.")
+		return nil, &rejected, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	if err := tx.DeleteCategory(ctx, category.ID, ownerID); err != nil {
+		return nil, nil, err
+	}
+	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, 0, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	accepted := acceptedFromChange(change)
+	return &accepted, nil, nil
+}
+
+func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+	var category Category
+	if err := category.FromRequest(op.ChangeData, true); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
@@ -384,12 +419,7 @@ func (s *Service) mutateCategory(ctx context.Context, tx *store.Store, ownerID, 
 		return nil, nil, err
 	}
 
-	if op.OperationType == OperationModifyCategory {
-		err = tx.UpdateCategory(ctx, category.ID, ownerID, category.Name)
-	} else {
-		err = tx.DeleteCategory(ctx, category.ID, ownerID)
-	}
-	if err != nil {
+	if err := tx.UpdateCategory(ctx, category.ID, ownerID, category.Name); err != nil {
 		return nil, nil, err
 	}
 	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, nil, 0, 0)
@@ -449,73 +479,84 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, devi
 	return accepted, nil, nil
 }
 
-// mutateNote applies update/delete operations for existing notes.
-func (s *Service) mutateNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
-	var mutation NoteMutation
-	if err := mutation.FromRequest(op.ChangeData, op.OperationType); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	if op.OperationType == OperationDeleteNote {
-		deleted, err := tx.DeleteNote(ctx, op.NoteID, ownerID, op.BaseNoteVersion)
-		if errors.Is(err, store.ErrNotFound) {
-			current, lookupErr := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
-			if errors.Is(lookupErr, store.ErrNotFound) {
-				rejected := rejectedNotFound(op, "Note not found.")
-				return nil, &rejected, nil
-			}
-			if lookupErr != nil {
-				return nil, nil, lookupErr
-			}
-			rejected := rejectedConflict(op, current.CurrentVersion)
-			return nil, &rejected, nil
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		if state.note == nil {
-			state.note = &deleted
-		} else {
-			state.note.DeletedAt = deleted.DeletedAt
-			state.note.UpdatedAt = deleted.UpdatedAt
-		}
-		state.noteLoaded = true
-		return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
-	}
-
+func (s *Service) existingNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, state *noteBatchState, op ClientOperation) (*RejectedDTO, error) {
 	if err := state.ensureNote(ctx, tx, ownerID, op.NoteID); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if state.note == nil {
 		rejected := rejectedNotFound(op, "Note not found.")
-		return nil, &rejected, nil
+		return &rejected, nil
 	}
 	if state.note.CurrentVersion != op.BaseNoteVersion {
 		rejected := rejectedConflict(op, state.note.CurrentVersion)
+		return &rejected, nil
+	}
+	return nil, nil
+}
+
+func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+	deleted, err := tx.DeleteNote(ctx, op.NoteID, ownerID, op.BaseNoteVersion)
+	if errors.Is(err, store.ErrNotFound) {
+		current, lookupErr := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
+		if errors.Is(lookupErr, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Note not found.")
+			return nil, &rejected, nil
+		}
+		if lookupErr != nil {
+			return nil, nil, lookupErr
+		}
+		rejected := rejectedConflict(op, current.CurrentVersion)
 		return nil, &rejected, nil
 	}
-
-	switch op.OperationType {
-	case OperationModifyNoteProperty:
-		noteProperties, err := mergeJSONProperties(state.note.NoteProperties, mutation.NoteProperties, "noteProperties")
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		state.note.NoteProperties = noteProperties
-		return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
-
-	case OperationModifyNoteTitle:
-		title, err := applyTextDelta(state.note.Title, mutation.TextChange.Text, mutation.TextChange.TextOperation, mutation.TextChange.Index)
-		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		state.note.Title = title
-		return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
-
+	if err != nil {
+		return nil, nil, err
 	}
-	return nil, nil, errors.New("unsupported note operation")
+	if state.note == nil {
+		state.note = &deleted
+	} else {
+		// Preserve earlier in-batch note edits while adopting the persisted
+		// deletion timestamps.
+		state.note.DeletedAt = deleted.DeletedAt
+		state.note.UpdatedAt = deleted.UpdatedAt
+	}
+	state.noteLoaded = true
+	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
+}
+
+func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+	var mutation NoteMutation
+	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteProperty); err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
+		return nil, rejected, err
+	}
+	noteProperties, err := mergeJSONProperties(state.note.NoteProperties, mutation.NoteProperties, "noteProperties")
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	state.note.NoteProperties = noteProperties
+	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
+}
+
+func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+	var mutation NoteMutation
+	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteTitle); err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
+		return nil, rejected, err
+	}
+	title, err := applyTextDelta(state.note.Title, mutation.TextChange.Text, mutation.TextChange.TextOperation, mutation.TextChange.Index)
+	if err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	state.note.Title = title
+	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
 func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, note *store.Note, op ClientOperation, blockID *uuid.UUID) (*AcceptedDTO, *RejectedDTO, error) {
@@ -532,7 +573,7 @@ func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ow
 // batch when a later operation targets it.
 func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var blockModel BlockModel
-	if err := blockModel.FromRequest(op.ChangeData); err != nil {
+	if err := blockModel.FromCreateOperation(op.ChangeData); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
@@ -568,50 +609,48 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &block.ID)
 }
 
-// mutateBlock loads one target block for edits and applies deletes directly.
-func (s *Service) mutateBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
-	if err := mutation.FromRequest(op.ChangeData, op.OperationType); err != nil {
+	if err := mutation.FromRequest(op.ChangeData, OperationDeleteBlock); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	blockID := mutation.ID
-
-	if err := state.ensureNote(ctx, tx, ownerID, op.NoteID); err != nil {
-		return nil, nil, err
+	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
+		return nil, rejected, err
 	}
-	if state.note == nil {
-		rejected := rejectedNotFound(op, "Note not found.")
-		return nil, &rejected, nil
-	}
-	if state.note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, state.note.CurrentVersion)
-		return nil, &rejected, nil
-	}
-
-	if op.OperationType == OperationDeleteBlock {
-		block, exists := state.blocks[blockID]
-		if exists {
-			block.DeletedAt.Valid = true
-			block.DeletedAt.Time = time.Now().UTC()
-			if err := tx.UpdateBlockState(ctx, *block); err != nil {
-				return nil, nil, err
-			}
-			delete(state.dirtyBlocks, blockID)
-		} else {
-			deleted, err := tx.DeleteBlock(ctx, blockID, op.NoteID)
-			if errors.Is(err, store.ErrNotFound) {
-				rejected := rejectedNotFound(op, "Block not found.")
-				return nil, &rejected, nil
-			}
-			if err != nil {
-				return nil, nil, err
-			}
-			state.blocks[blockID] = &deleted
+	block, exists := state.blocks[blockID]
+	if exists {
+		block.DeletedAt.Valid = true
+		block.DeletedAt.Time = time.Now().UTC()
+		if err := tx.UpdateBlockState(ctx, *block); err != nil {
+			return nil, nil, err
 		}
-		return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &blockID)
+		delete(state.dirtyBlocks, blockID)
+	} else {
+		deleted, err := tx.DeleteBlock(ctx, blockID, op.NoteID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected := rejectedNotFound(op, "Block not found.")
+			return nil, &rejected, nil
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		state.blocks[blockID] = &deleted
 	}
+	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &blockID)
+}
 
+func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+	var mutation BlockMutation
+	if err := mutation.FromRequest(op.ChangeData, OperationModifyBlock); err != nil {
+		rejected := rejectedInvalid(op, err.Error())
+		return nil, &rejected, nil
+	}
+	blockID := mutation.ID
+	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
+		return nil, rejected, err
+	}
 	block, err := state.ensureBlock(ctx, tx, op.NoteID, blockID)
 	if errors.Is(err, store.ErrNotFound) {
 		rejected := rejectedNotFound(op, "Block not found.")
