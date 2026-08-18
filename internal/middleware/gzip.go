@@ -3,6 +3,7 @@ package middleware
 import (
 	"compress/gzip"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -68,7 +69,9 @@ func (w gzipResponseWriter) Write(b []byte) (int, error) {
 // Flush pushes pending compressed bytes and forwards flushes to the underlying
 // writer when supported.
 func (w gzipResponseWriter) Flush() {
-	_ = w.writer.Flush()
+	if err := w.writer.Flush(); err != nil {
+		slog.Error("flush gzip response", "error", err)
+	}
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
@@ -83,7 +86,14 @@ func GzipResponse(next http.Handler) http.Handler {
 		}
 
 		gz := gzip.NewWriter(w)
-		defer gz.Close()
+		defer func() {
+			if err := gz.Close(); err != nil {
+				slog.ErrorContext(r.Context(), "close gzip response",
+					"request_id", httpapi.RequestIDFromContext(r.Context()),
+					"error", err,
+				)
+			}
+		}()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Add("Vary", "Accept-Encoding")
 		next.ServeHTTP(gzipResponseWriter{ResponseWriter: w, writer: gz}, r)

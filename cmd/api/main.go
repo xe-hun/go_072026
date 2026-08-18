@@ -34,6 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger := newLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
 
 	// Store owns the pgx connection pool and the sqlc query wrapper. The pool is
 	// created once per process and closed during graceful shutdown.
@@ -124,6 +125,10 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		// Readiness confirms the process can currently reach PostgreSQL.
 		if err := st.Ping(r.Context()); err != nil {
+			logger.ErrorContext(r.Context(), "database readiness check failed",
+				"request_id", httpapi.RequestIDFromContext(r.Context()),
+				"error", err,
+			)
 			httpapi.WriteError(w, r, httpapi.NewError(http.StatusServiceUnavailable, httpapi.CodeInternalError, "Database is not ready."))
 			return
 		}

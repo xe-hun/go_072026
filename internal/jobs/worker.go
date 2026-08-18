@@ -86,7 +86,15 @@ func (w *Worker) ProcessOnce(ctx context.Context) (bool, error) {
 	err = w.processJob(ctx, job)
 	if err != nil {
 		// Failure releases the lock and schedules a retry with bounded backoff.
-		_ = w.store.FailOutboxJob(ctx, job.ID, err.Error(), retryDelay(job.Attempts))
+		if failErr := w.store.FailOutboxJob(ctx, job.ID, err.Error(), retryDelay(job.Attempts)); failErr != nil {
+			w.logger.ErrorContext(ctx, "record outbox job failure",
+				"job_id", job.ID,
+				"job_type", job.JobType,
+				"processing_error", err,
+				"error", failErr,
+			)
+			return true, errors.Join(err, failErr)
+		}
 		return true, err
 	}
 	if err := w.store.CompleteOutboxJob(ctx, job.ID); err != nil {

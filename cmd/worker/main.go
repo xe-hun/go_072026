@@ -26,6 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger := newLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
 
 	// The worker has its own database pool because it is a separate process from
 	// the API. It still uses the same store/sqlc persistence boundary.

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -18,12 +19,15 @@ type errorBody struct {
 	Details   map[string]any `json:"details,omitempty"`
 }
 
-// WriteJSON writes a JSON response. Encoding errors are ignored because the
-// values passed by handlers are controlled application structs.
+// WriteJSON writes a JSON response and logs transport/encoding failures. At
+// this point headers may already have been sent, so logging is the only safe
+// way to surface a failed response write.
 func WriteJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		slog.Error("write json response", "status", status, "error", err)
+	}
 }
 
 // WriteNoContent writes an empty 204 response for successful commands that do
@@ -36,6 +40,14 @@ func WriteNoContent(w http.ResponseWriter) {
 // request ID set by middleware.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	apiErr := FromError(err)
+	slog.ErrorContext(r.Context(), "http request error",
+		"request_id", RequestIDFromContext(r.Context()),
+		"method", r.Method,
+		"path", r.URL.Path,
+		"status", apiErr.Status,
+		"code", apiErr.Code,
+		"error", err,
+	)
 	WriteJSON(w, apiErr.Status, errorEnvelope{
 		Error: errorBody{
 			Code:      apiErr.Code,

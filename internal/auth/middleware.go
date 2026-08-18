@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -84,6 +85,10 @@ func Middleware(verifier *Verifier) func(http.Handler) http.Handler {
 			}
 			claims, err := verifier.Verify(r.Context(), strings.TrimSpace(token))
 			if err != nil {
+				slog.ErrorContext(r.Context(), "token verification failed",
+					"request_id", httpapi.RequestIDFromContext(r.Context()),
+					"error", err,
+				)
 				httpapi.WriteError(w, r, httpapi.Unauthorized())
 				return
 			}
