@@ -8,42 +8,34 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	constants "notes-server/internal"
 )
 
 const (
-	// Note operation names.
-	OperationCreateNote         = "create_note"
-	OperationDeleteNote         = "delete_note"
-	OperationModifyNoteProperty = "modify_note_property"
-	OperationModifyNoteTitle    = "modify_note_title"
-
-	// Block operation names.
-	OperationCreateBlock = "create_block"
-	OperationDeleteBlock = "delete_block"
-	OperationModifyBlock = "modify_block"
-
-	// Category operation names.
-	OperationCreateCategory = "create_category"
-	OperationDeleteCategory = "delete_category"
-	OperationModifyCategory = "modify_category"
-
-	// Text operation names accepted by title/block text deltas.
-	TextOperationInsert = "insert"
-	TextOperationDelete = "delete"
-
-	// ChangeFormatStructuredV1 stores changed fields rather than raw character
-	// diffs.
-	ChangeFormatStructuredV1 = "structured-operation-v1"
+	OperationCreateNote         = constants.OperationCreateNote
+	OperationDeleteNote         = constants.OperationDeleteNote
+	OperationModifyNoteProperty = constants.OperationModifyNoteProperty
+	OperationModifyNoteTitle    = constants.OperationModifyNoteTitle
+	OperationCreateBlock        = constants.OperationCreateBlock
+	OperationDeleteBlock        = constants.OperationDeleteBlock
+	OperationModifyBlock        = constants.OperationModifyBlock
+	OperationCreateCategory     = constants.OperationCreateCategory
+	OperationDeleteCategory     = constants.OperationDeleteCategory
+	OperationModifyCategory     = constants.OperationModifyCategory
+	TextOperationInsert         = constants.TextOperationInsert
+	TextOperationDelete         = constants.TextOperationDelete
+	ChangeFormatStructuredV1    = constants.ChangeFormatStructuredV1
 )
 
 // allowedBlockTypes is the initial block type allow-list. Unknown types are
 // rejected so clients cannot write unsupported data shapes.
 var allowedBlockTypes = map[string]struct{}{
-	"text":          {},
-	"bullet":        {},
-	"todo":          {},
-	"numbered_list": {},
-	"attachment":    {},
+	constants.BlockTypeText:         {},
+	constants.BlockTypeBullet:       {},
+	constants.BlockTypeTodo:         {},
+	constants.BlockTypeNumberedList: {},
+	constants.BlockTypeAttachment:   {},
 }
 
 // TextChange is the direct text delta shape used by modify_note_title and the
