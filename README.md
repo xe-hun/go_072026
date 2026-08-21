@@ -96,7 +96,7 @@ include a per-note integer `sequence`; the server sorts by `noteId` and then
 
 The sync GET endpoint pulls remote changes after its query-string cursor. It
 returns `changes`, `hasMore`, and `nextCursor`; pulled changes expose
-`globalSequence` and omit `operationId`, `blockId`, and `resultingNoteVersion`.
+`globalSequence` and `resultingNoteVersion`, and omit `operationId` and `blockId`.
 
 `modify_note_property` writes the supplied `noteProperties` object into the
 note, `modify_note_title` receives a nested `textDelta`, `create_block` receives

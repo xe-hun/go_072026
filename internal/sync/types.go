@@ -113,14 +113,15 @@ type BlockSnapshot struct {
 
 // PulledChange is a change-log row sent to another device during pull sync.
 type PulledChange struct {
-	ID              uuid.UUID       `json:"id"`
-	NoteID          uuid.UUID       `json:"noteId"`
-	DeviceID        uuid.UUID       `json:"deviceId"`
-	OperationType   string          `json:"operationType"`
-	BaseNoteVersion int64           `json:"baseNoteVersion"`
-	ChangeFormat    string          `json:"changeFormat"`
-	SchemaVersion   int32           `json:"schemaVersion"`
-	ChangeData      json.RawMessage `json:"changeData"`
-	GlobalSequence  int64           `json:"globalSequence"`
-	CreatedAt       time.Time       `json:"createdAt"`
+	ID                   uuid.UUID       `json:"id"`
+	NoteID               uuid.UUID       `json:"noteId"`
+	DeviceID             uuid.UUID       `json:"deviceId"`
+	OperationType        string          `json:"operationType"`
+	BaseNoteVersion      int64           `json:"baseNoteVersion"`
+	ResultingNoteVersion int64           `json:"resultingNoteVersion"`
+	ChangeFormat         string          `json:"changeFormat"`
+	SchemaVersion        int32           `json:"schemaVersion"`
+	ChangeData           json.RawMessage `json:"changeData"`
+	GlobalSequence       int64           `json:"globalSequence"`
+	CreatedAt            time.Time       `json:"createdAt"`
 }

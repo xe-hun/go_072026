@@ -19,14 +19,17 @@ func TestSyncResponseContracts(t *testing.T) {
 		}
 	}
 
-	pullJSON, err := json.Marshal(PulledChange{GlobalSequence: 42})
+	pullJSON, err := json.Marshal(PulledChange{GlobalSequence: 42, ResultingNoteVersion: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(pullJSON), `"globalSequence":42`) {
 		t.Fatalf("pulled change does not contain globalSequence: %s", pullJSON)
 	}
-	for _, field := range []string{"operationId", "blockId", "resultingNoteVersion", "sequence"} {
+	if !strings.Contains(string(pullJSON), `"resultingNoteVersion":7`) {
+		t.Fatalf("pulled change does not contain resultingNoteVersion: %s", pullJSON)
+	}
+	for _, field := range []string{"operationId", "blockId", "sequence"} {
 		if strings.Contains(string(pullJSON), `"`+field+`"`) {
 			t.Fatalf("pulled change unexpectedly contains %q: %s", field, pullJSON)
 		}

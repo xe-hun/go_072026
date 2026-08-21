@@ -515,16 +515,17 @@ func (c *PulledChange) FromEntity(entity store.NoteChange) error {
 		return errors.New("change entity must contain valid identifiers")
 	}
 	*c = PulledChange{
-		ID:              entity.ID,
-		NoteID:          entity.NoteID,
-		DeviceID:        entity.DeviceID,
-		OperationType:   entity.OperationType,
-		BaseNoteVersion: entity.BaseNoteVersion,
-		ChangeFormat:    entity.ChangeFormat,
-		SchemaVersion:   entity.SchemaVersion,
-		ChangeData:      store.NormalizeJSON(entity.ChangeData),
-		GlobalSequence:  entity.GlobalSequence,
-		CreatedAt:       entity.CreatedAt,
+		ID:                   entity.ID,
+		NoteID:               entity.NoteID,
+		DeviceID:             entity.DeviceID,
+		OperationType:        entity.OperationType,
+		BaseNoteVersion:      entity.BaseNoteVersion,
+		ResultingNoteVersion: entity.ResultingNoteVersion,
+		ChangeFormat:         entity.ChangeFormat,
+		SchemaVersion:        entity.SchemaVersion,
+		ChangeData:           store.NormalizeJSON(entity.ChangeData),
+		GlobalSequence:       entity.GlobalSequence,
+		CreatedAt:            entity.CreatedAt,
 	}
 	return nil
 }
