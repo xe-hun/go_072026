@@ -79,6 +79,7 @@ VS Code debug configurations are included for the API and worker in `.vscode/lau
 - `GET /v1/devices`
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
+- `GET /v1/sync?protocolVersion=1&clientVersion=...&deviceId=...&cursor=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 
@@ -86,14 +87,16 @@ All `/v1` endpoints require `Authorization: Bearer <JWT>`.
 
 ## Sync Notes
 
-The sync endpoint accepts a batch of note/block operations. Client operations
+The sync POST endpoint accepts a batch of note/block operations without a cursor. Client operations
 include a per-note integer `sequence`; the server sorts by `noteId` and then
 `sequence`, applies each note as an atomic batch, and returns:
 
 - accepted note batches with the note ID and one authoritative server version
 - rejected note batches with the current server note snapshot
-- pulled changes after the supplied cursor
-- the next cursor
+
+The sync GET endpoint pulls remote changes after its query-string cursor. It
+returns `changes`, `hasMore`, and `nextCursor`; pulled changes expose
+`globalSequence` and omit `operationId`, `blockId`, and `resultingNoteVersion`.
 
 `modify_note_property` writes the supplied `noteProperties` object into the
 note, `modify_note_title` receives a nested `textDelta`, `create_block` receives

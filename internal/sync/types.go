@@ -18,12 +18,16 @@ type Request struct {
 	ClientVersion string `json:"clientVersion,omitempty"`
 	// DeviceID identifies the registered device making the request.
 	DeviceID uuid.UUID `json:"deviceId"`
-	// Cursor is the last global sequence the client has processed.
-	Cursor int64 `json:"cursor"`
-	// Limit bounds how many remote changes are pulled in this response.
-	Limit int32 `json:"limit,omitempty"`
-	// Operations are client-submitted writes to apply before pulling changes.
+	// Operations are client-submitted writes to apply.
 	Operations []ClientOperation `json:"operations"`
+}
+
+// PullRequest contains the query parameters accepted by GET /v1/sync.
+type PullRequest struct {
+	ProtocolVersion int
+	ClientVersion   string
+	DeviceID        uuid.UUID
+	Cursor          int64
 }
 
 // ClientOperation is one idempotent note, block, or category mutation
@@ -53,17 +57,13 @@ type Response struct {
 	Accepted []AcceptedDTO `json:"accepted"`
 	// Rejected lists per-operation validation/conflict failures.
 	Rejected []RejectedDTO `json:"rejected"`
-	// Changes contains remote changes after the supplied cursor.
-	Changes []PulledChange `json:"changes"`
-	// NextCursor is the cursor the client should store after applying this
-	// response.
-	NextCursor int64 `json:"nextCursor"`
-	// HasMore tells the client to immediately pull again with NextCursor.
-	HasMore bool `json:"hasMore"`
-	// ResyncRequired is reserved for expired cursors/full resync flows.
-	ResyncRequired bool `json:"resyncRequired"`
-	// Reason describes why a resync is required.
-	Reason string `json:"reason,omitempty"`
+}
+
+// PullResponse is returned by GET /v1/sync.
+type PullResponse struct {
+	Changes    []PulledChange `json:"changes"`
+	HasMore    bool           `json:"hasMore"`
+	NextCursor int64          `json:"nextCursor"`
 }
 
 // AcceptedDTO reports the resulting version for an accepted note batch.
@@ -113,19 +113,14 @@ type BlockSnapshot struct {
 
 // PulledChange is a change-log row sent to another device during pull sync.
 type PulledChange struct {
-	ID            uuid.UUID  `json:"id"`
-	OperationID   uuid.UUID  `json:"operationId"`
-	NoteID        uuid.UUID  `json:"noteId"`
-	BlockID       *uuid.UUID `json:"blockId,omitempty"`
-	DeviceID      uuid.UUID  `json:"deviceId"`
-	OperationType string     `json:"operationType"`
-	// Base/resulting versions let clients apply or inspect changes in order.
-	BaseNoteVersion      int64           `json:"baseNoteVersion"`
-	ResultingNoteVersion int64           `json:"resultingNoteVersion"`
-	ChangeFormat         string          `json:"changeFormat"`
-	SchemaVersion        int32           `json:"schemaVersion"`
-	ChangeData           json.RawMessage `json:"changeData"`
-	// Sequence is the global cursor value for pagination.
-	Sequence  int64     `json:"sequence"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID              uuid.UUID       `json:"id"`
+	NoteID          uuid.UUID       `json:"noteId"`
+	DeviceID        uuid.UUID       `json:"deviceId"`
+	OperationType   string          `json:"operationType"`
+	BaseNoteVersion int64           `json:"baseNoteVersion"`
+	ChangeFormat    string          `json:"changeFormat"`
+	SchemaVersion   int32           `json:"schemaVersion"`
+	ChangeData      json.RawMessage `json:"changeData"`
+	GlobalSequence  int64           `json:"globalSequence"`
+	CreatedAt       time.Time       `json:"createdAt"`
 }

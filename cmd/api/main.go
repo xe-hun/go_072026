@@ -141,6 +141,7 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 		r.Use(auth.Middleware(verifier))
 		r.Mount("/devices", deviceHandler.Routes())
 		r.Post("/sync", syncHandler.ServeHTTP)
+		r.Get("/sync", syncHandler.PullHTTP)
 		r.Mount("/notes", noteHandler.Routes())
 	})
 	return r

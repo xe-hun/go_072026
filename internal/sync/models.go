@@ -31,19 +31,18 @@ func (r Request) Validate(maxOperations int) error {
 	return nil
 }
 
-// PullLimit validates and normalizes the request pull limit.
-func (r Request) PullLimit(defaultLimit, maxLimit int32) (int32, error) {
-	limit := r.Limit
-	if limit == 0 {
-		limit = defaultLimit
+// Validate checks pull request query parameters.
+func (r PullRequest) Validate() error {
+	if r.ProtocolVersion != ProtocolVersion {
+		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
-	if limit < 1 {
-		return 0, httpapi.InvalidRequest("limit must be greater than zero.")
+	if r.DeviceID == uuid.Nil {
+		return httpapi.InvalidRequest("deviceId is required.")
 	}
-	if limit > maxLimit {
-		limit = maxLimit
+	if r.Cursor < 0 {
+		return httpapi.InvalidRequest("cursor must be greater than or equal to zero.")
 	}
-	return limit, nil
+	return nil
 }
 
 // Validate checks operation-level invariants before database state is read.
@@ -516,19 +515,16 @@ func (c *PulledChange) FromEntity(entity store.NoteChange) error {
 		return errors.New("change entity must contain valid identifiers")
 	}
 	*c = PulledChange{
-		ID:                   entity.ID,
-		OperationID:          entity.ClientOperationID,
-		NoteID:               entity.NoteID,
-		BlockID:              store.UUIDPtr(entity.BlockID),
-		DeviceID:             entity.DeviceID,
-		OperationType:        entity.OperationType,
-		BaseNoteVersion:      entity.BaseNoteVersion,
-		ResultingNoteVersion: entity.ResultingNoteVersion,
-		ChangeFormat:         entity.ChangeFormat,
-		SchemaVersion:        entity.SchemaVersion,
-		ChangeData:           store.NormalizeJSON(entity.ChangeData),
-		Sequence:             entity.GlobalSequence,
-		CreatedAt:            entity.CreatedAt,
+		ID:              entity.ID,
+		NoteID:          entity.NoteID,
+		DeviceID:        entity.DeviceID,
+		OperationType:   entity.OperationType,
+		BaseNoteVersion: entity.BaseNoteVersion,
+		ChangeFormat:    entity.ChangeFormat,
+		SchemaVersion:   entity.SchemaVersion,
+		ChangeData:      store.NormalizeJSON(entity.ChangeData),
+		GlobalSequence:  entity.GlobalSequence,
+		CreatedAt:       entity.CreatedAt,
 	}
 	return nil
 }
