@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -16,6 +17,7 @@ func DecodeJSON(r *http.Request, dst any) error {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		var maxBytesErr *http.MaxBytesError
+		slog.Error("validation Error", "error", err)
 		if errors.As(err, &maxBytesErr) {
 			return NewError(http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "The request body is too large.")
 		}

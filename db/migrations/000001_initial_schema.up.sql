@@ -45,7 +45,7 @@ CREATE INDEX note_blocks_note_position_idx
 
 -- sync_devices tracks every client device that can call /v1/sync for a user.
 CREATE TABLE sync_devices (
-    id UUID PRIMARY KEY,
+    id VARCHAR(30) PRIMARY KEY,
     owner_id UUID NOT NULL,
     device_name TEXT,
     platform TEXT,
@@ -67,7 +67,7 @@ CREATE TABLE note_changes (
     owner_id UUID NOT NULL,
     note_id UUID REFERENCES notes(id),
     block_id UUID,
-    device_id UUID NOT NULL REFERENCES sync_devices(id),
+    device_id VARCHAR(30) NOT NULL REFERENCES sync_devices(id),
     client_operation_id UUID NOT NULL,
     operation_type TEXT NOT NULL,
     base_note_version BIGINT NOT NULL,

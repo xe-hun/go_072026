@@ -45,7 +45,7 @@ type NoteChange struct {
 	OwnerID              pgtype.UUID        `json:"owner_id"`
 	NoteID               pgtype.UUID        `json:"note_id"`
 	BlockID              pgtype.UUID        `json:"block_id"`
-	DeviceID             pgtype.UUID        `json:"device_id"`
+	DeviceID             string             `json:"device_id"`
 	ClientOperationID    pgtype.UUID        `json:"client_operation_id"`
 	OperationType        string             `json:"operation_type"`
 	BaseNoteVersion      int64              `json:"base_note_version"`
@@ -83,7 +83,7 @@ type OutboxJob struct {
 }
 
 type SyncDevice struct {
-	ID               pgtype.UUID        `json:"id"`
+	ID               string             `json:"id"`
 	OwnerID          pgtype.UUID        `json:"owner_id"`
 	DeviceName       pgtype.Text        `json:"device_name"`
 	Platform         pgtype.Text        `json:"platform"`

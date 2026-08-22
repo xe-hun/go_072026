@@ -87,7 +87,9 @@ Tooling dependencies:
 
 `note_blocks` stores ordered blocks and block-properties JSON. Blocks use string positions for fractional indexing so inserts and moves usually update only one row.
 
-`sync_devices` stores per-user devices, protocol version, last seen timestamp, revocation timestamp, and last global cursor.
+`sync_devices` stores per-user devices keyed by a client-supplied string device
+ID of at most 30 characters, along with protocol version, last seen timestamp,
+revocation timestamp, and last global cursor.
 
 `note_changes` is append-only. Every accepted operation creates exactly one change record with base/resulting versions and a global sequence.
 
@@ -139,7 +141,7 @@ Services never trust client-supplied owner IDs. They use the authenticated user 
 Device registration:
 
 1. Handler decodes JSON.
-2. Service defaults protocol version to `1`.
+2. Service validates the client-supplied device ID and defaults protocol version to `1`.
 3. Service rejects unsupported protocol versions.
 4. Store inserts a `sync_devices` row scoped to the authenticated user.
 5. Handler returns the device record.

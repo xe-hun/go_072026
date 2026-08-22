@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	constants "notes-server/internal"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
 )
@@ -14,7 +15,7 @@ import (
 // Device is the device model used between HTTP requests, persistence entities,
 // and API responses. It contains normalized values only.
 type Device struct {
-	ID               uuid.UUID
+	ID               string
 	OwnerID          uuid.UUID
 	DeviceName       *string
 	Platform         *string
@@ -29,8 +30,11 @@ type Device struct {
 // FromRequest builds a device model from the registration request and applies
 // request-level defaults and validation.
 func (m *Device) FromRequest(req RegisterDeviceRequest) error {
-	if req.DeviceID != nil && *req.DeviceID == uuid.Nil {
-		return httpapi.InvalidRequest("deviceId must be a valid UUID.")
+	if req.DeviceID == "" {
+		return httpapi.InvalidRequest("deviceId is required.")
+	}
+	if !constants.ValidDeviceID(req.DeviceID) {
+		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
 	}
 
 	protocolVersion := req.ProtocolVersion
@@ -41,10 +45,7 @@ func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
 
-	m.ID = uuid.New()
-	if req.DeviceID != nil {
-		m.ID = *req.DeviceID
-	}
+	m.ID = req.DeviceID
 	m.DeviceName = req.DeviceName
 	m.Platform = req.Platform
 	m.AppVersion = req.AppVersion
@@ -54,7 +55,7 @@ func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 
 // FromEntity maps a persistence entity into the device model.
 func (m *Device) FromEntity(entity store.SyncDevice) error {
-	if entity.ID == uuid.Nil || entity.OwnerID == uuid.Nil {
+	if !constants.ValidDeviceID(entity.ID) || entity.OwnerID == uuid.Nil {
 		return errors.New("device entity must contain valid identifiers")
 	}
 	if entity.ProtocolVersion != 1 {
@@ -76,7 +77,7 @@ func (m *Device) FromEntity(entity store.SyncDevice) error {
 
 // Entity converts the model into the persistence input for device creation.
 func (m Device) Entity(ownerID uuid.UUID) (store.CreateDeviceParams, error) {
-	if ownerID == uuid.Nil || m.ID == uuid.Nil {
+	if ownerID == uuid.Nil || !constants.ValidDeviceID(m.ID) {
 		return store.CreateDeviceParams{}, httpapi.InvalidRequest("device identifiers are required.")
 	}
 	if m.ProtocolVersion != 1 {

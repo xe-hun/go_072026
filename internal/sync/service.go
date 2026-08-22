@@ -108,7 +108,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 
 	s.logger.InfoContext(ctx, "sync completed",
 		"user_id", ownerID.String(),
-		"device_id", req.DeviceID.String(),
+		"device_id", req.DeviceID,
 		"accepted", len(resp.Accepted),
 		"rejected", len(resp.Rejected),
 	)
@@ -227,7 +227,7 @@ func (b *noteBatchState) ensureBlock(ctx context.Context, tx *store.Store, noteI
 // applyOperationBatch applies all operations for one note under a savepoint.
 // Direct create/delete operations are written immediately; targeted edits are
 // kept in noteBatchState until the batch has been accepted.
-func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, operations []ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, operations []ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	if len(operations) == 0 {
 		return nil, nil, nil
 	}
@@ -320,7 +320,7 @@ func rejectedBatchDTO(operations []ClientOperation, failed RejectedDTO, document
 // applyOperation handles one operation from a sync batch. It first checks the
 // idempotency table, then validates shape and dispatches to the concrete
 // operation implementation.
-func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*noteBatchState, *AcceptedDTO, *RejectedDTO, bool, error) {
+func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*noteBatchState, *AcceptedDTO, *RejectedDTO, bool, error) {
 	if processed, err := tx.FindProcessedOperation(ctx, deviceID, op.OperationID); err == nil {
 		// A retry returns the original accepted result and does not mutate state
 		// again.
@@ -377,7 +377,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID, 
 	}
 }
 
-func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, true); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -394,7 +394,7 @@ func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID, 
 	return &accepted, nil, nil
 }
 
-func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, false); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -417,7 +417,7 @@ func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID, 
 	return &accepted, nil, nil
 }
 
-func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, true); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -444,7 +444,7 @@ func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID, 
 
 // createNote applies create_note. A new note must be based on version 0 and
 // results in note version 1.
-func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	if op.BaseNoteVersion != 0 {
 		rejected := rejectedConflict(op, 0)
 		return nil, &rejected, nil
@@ -506,7 +506,7 @@ func (s *Service) existingNote(ctx context.Context, tx *store.Store, ownerID uui
 	return nil, nil
 }
 
-func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	deleted, err := tx.DeleteNote(ctx, op.NoteID, ownerID, op.BaseNoteVersion)
 	if errors.Is(err, store.ErrNotFound) {
 		current, lookupErr := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
@@ -535,7 +535,7 @@ func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID, devi
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
-func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation NoteMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteProperty); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -553,7 +553,7 @@ func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, owner
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
-func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation NoteMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteTitle); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -571,7 +571,7 @@ func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID,
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
-func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, note *store.Note, op ClientOperation, blockID *uuid.UUID) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, note *store.Note, op ClientOperation, blockID *uuid.UUID) (*AcceptedDTO, *RejectedDTO, error) {
 	baseVersion := note.CurrentVersion
 	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, blockID, baseVersion, baseVersion+1)
 	if err != nil {
@@ -583,7 +583,7 @@ func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ow
 
 // createBlock writes a new block directly and keeps only its state in the
 // batch when a later operation targets it.
-func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var blockModel BlockModel
 	if err := blockModel.FromCreateOperation(op.ChangeData); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -621,7 +621,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &block.ID)
 }
 
-func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationDeleteBlock); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -653,7 +653,7 @@ func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID, dev
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &blockID)
 }
 
-func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyBlock); err != nil {
 		rejected := rejectedInvalid(op, err.Error())
@@ -734,7 +734,7 @@ func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMes
 }
 
 // insertChange writes the append-only history row for an accepted operation.
-func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
+func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
 	params, err := op.Entity(ownerID, deviceID, blockID, baseNoteVersion, resultingNoteVersion)
 	if err != nil {
 		return store.NoteChange{}, err

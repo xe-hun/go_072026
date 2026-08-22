@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	constants "notes-server/internal"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
 )
@@ -59,7 +60,13 @@ func (s *Service) List(ctx context.Context, ownerID uuid.UUID) (ListDevicesRespo
 
 // Revoke marks a device as revoked. Future sync attempts from that device are
 // rejected by the sync service.
-func (s *Service) Revoke(ctx context.Context, ownerID, deviceID uuid.UUID) error {
+func (s *Service) Revoke(ctx context.Context, ownerID uuid.UUID, deviceID string) error {
+	if deviceID == "" {
+		return httpapi.InvalidRequest("deviceId is required.")
+	}
+	if !constants.ValidDeviceID(deviceID) {
+		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
+	}
 	err := s.store.RevokeDevice(ctx, deviceID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
 		return httpapi.NotFound("Device not found.")

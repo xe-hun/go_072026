@@ -11,9 +11,9 @@ import (
 
 // FindProcessedOperation looks up an operation by the idempotency key
 // (device_id, client_operation_id).
-func (s *Store) FindProcessedOperation(ctx context.Context, deviceID, operationID uuid.UUID) (NoteChange, error) {
+func (s *Store) FindProcessedOperation(ctx context.Context, deviceID string, operationID uuid.UUID) (NoteChange, error) {
 	change, err := s.q.FindProcessedOperation(ctx, db.FindProcessedOperationParams{
-		DeviceID:          pgUUID(deviceID),
+		DeviceID:          deviceID,
 		ClientOperationID: pgUUID(operationID),
 	})
 	return fromDBChange(change), mapNoRows(err)
@@ -35,7 +35,7 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 		OwnerID:              pgUUID(arg.OwnerID),
 		NoteID:               noteID,
 		BlockID:              blockID,
-		DeviceID:             pgUUID(arg.DeviceID),
+		DeviceID:             arg.DeviceID,
 		ClientOperationID:    pgUUID(arg.ClientOperationID),
 		OperationType:        arg.OperationType,
 		BaseNoteVersion:      arg.BaseNoteVersion,
@@ -49,11 +49,11 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 
 // GetChangesAfterCursor returns remote changes after a cursor, excluding changes
 // submitted by the requesting device.
-func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID uuid.UUID, limit int32) ([]NoteChange, error) {
+func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID string, limit int32) ([]NoteChange, error) {
 	rows, err := s.q.GetChangesAfterCursor(ctx, db.GetChangesAfterCursorParams{
 		OwnerID:        pgUUID(ownerID),
 		GlobalSequence: pgtype.Int8{Int64: cursor, Valid: true},
-		DeviceID:       pgUUID(excludeDeviceID),
+		DeviceID:       excludeDeviceID,
 		Limit:          limit,
 	})
 	if err != nil {

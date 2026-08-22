@@ -187,10 +187,11 @@ Register a device:
 curl -X POST http://localhost:8080/v1/devices \
   -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
-  -d "{\"deviceName\":\"Local Dev\",\"platform\":\"windows\",\"appVersion\":\"1.0.0\",\"protocolVersion\":1}"
+  -d "{\"deviceId\":\"local-dev\",\"deviceName\":\"Local Dev\",\"platform\":\"windows\",\"appVersion\":\"1.0.0\",\"protocolVersion\":1}"
 ```
 
-Save the returned device `id`. It is required by `/v1/sync`.
+Save the returned device `id`. It must be a client-supplied string of at most
+30 characters and is required by `/v1/sync`.
 
 ## 9. Send an Empty Sync Request
 

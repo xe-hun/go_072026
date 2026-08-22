@@ -21,7 +21,7 @@ RETURNING id, owner_id, device_name, platform, app_version, protocol_version, la
 `
 
 type CreateDeviceParams struct {
-	ID              pgtype.UUID `json:"id"`
+	ID              string      `json:"id"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 	DeviceName      pgtype.Text `json:"device_name"`
 	Platform        pgtype.Text `json:"platform"`
@@ -63,7 +63,7 @@ WHERE id = $1
 `
 
 type GetDeviceForOwnerParams struct {
-	ID      pgtype.UUID `json:"id"`
+	ID      string      `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
@@ -95,7 +95,7 @@ FOR UPDATE
 `
 
 type GetDeviceForOwnerForUpdateParams struct {
-	ID      pgtype.UUID `json:"id"`
+	ID      string      `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
@@ -167,7 +167,7 @@ WHERE id = $1
 `
 
 type RevokeDeviceParams struct {
-	ID      pgtype.UUID `json:"id"`
+	ID      string      `json:"id"`
 	OwnerID pgtype.UUID `json:"owner_id"`
 }
 
@@ -186,7 +186,7 @@ WHERE id = $1
 `
 
 type UpdateDeviceCursorParams struct {
-	ID               pgtype.UUID `json:"id"`
+	ID               string      `json:"id"`
 	OwnerID          pgtype.UUID `json:"owner_id"`
 	LastGlobalCursor int64       `json:"last_global_cursor"`
 }

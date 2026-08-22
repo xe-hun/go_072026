@@ -87,6 +87,9 @@ All `/v1` endpoints require `Authorization: Bearer <JWT>`.
 
 ## Sync Notes
 
+Device registration requires a client-supplied `deviceId` string with 30
+characters or fewer. The same value is used by the sync and revoke endpoints.
+
 The sync POST endpoint accepts a batch of note/block operations without a cursor. Client operations
 include a per-note integer `sequence`; the server sorts by `noteId` and then
 `sequence`, applies each note as an atomic batch, and returns:
@@ -110,7 +113,8 @@ the same PostgreSQL transaction. Operation idempotency is enforced by
 
 ## Assumptions
 
-- The client normally generates note, block, device, and operation UUIDs.
+- The client supplies a device ID string of at most 30 characters and normally
+  generates note, block, and operation UUIDs.
 - Text edits are stored as structured operations/changed fields, not raw character diffs.
 - Automatic text conflict merging is intentionally not implemented in v1.
 - Snapshot jobs are queued when configured thresholds are reached; cleanup/compaction hooks are present and deliberately conservative.

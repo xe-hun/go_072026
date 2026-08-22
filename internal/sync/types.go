@@ -17,7 +17,7 @@ type Request struct {
 	// ClientVersion is informational and useful in logs/debugging.
 	ClientVersion string `json:"clientVersion,omitempty"`
 	// DeviceID identifies the registered device making the request.
-	DeviceID uuid.UUID `json:"deviceId"`
+	DeviceID string `json:"deviceId"`
 	// Operations are client-submitted writes to apply.
 	Operations []ClientOperation `json:"operations"`
 }
@@ -26,7 +26,7 @@ type Request struct {
 type PullRequest struct {
 	ProtocolVersion int
 	ClientVersion   string
-	DeviceID        uuid.UUID
+	DeviceID        string
 	Cursor          int64
 }
 
@@ -115,7 +115,7 @@ type BlockSnapshot struct {
 type PulledChange struct {
 	ID                   uuid.UUID       `json:"id"`
 	NoteID               uuid.UUID       `json:"noteId"`
-	DeviceID             uuid.UUID       `json:"deviceId"`
+	DeviceID             string          `json:"deviceId"`
 	OperationType        string          `json:"operationType"`
 	BaseNoteVersion      int64           `json:"baseNoteVersion"`
 	ResultingNoteVersion int64           `json:"resultingNoteVersion"`

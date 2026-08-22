@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	constants "notes-server/internal"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
 )
@@ -22,8 +23,11 @@ func (r Request) Validate(maxOperations int) error {
 	if r.ProtocolVersion != ProtocolVersion {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
-	if r.DeviceID == uuid.Nil {
+	if r.DeviceID == "" {
 		return httpapi.InvalidRequest("deviceId is required.")
+	}
+	if !constants.ValidDeviceID(r.DeviceID) {
+		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
 	}
 	if len(r.Operations) > maxOperations {
 		return httpapi.NewError(http.StatusRequestEntityTooLarge, httpapi.CodePayloadTooLarge, "The sync request contains too many operations.")
@@ -36,8 +40,11 @@ func (r PullRequest) Validate() error {
 	if r.ProtocolVersion != ProtocolVersion {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
-	if r.DeviceID == uuid.Nil {
+	if r.DeviceID == "" {
 		return httpapi.InvalidRequest("deviceId is required.")
+	}
+	if !constants.ValidDeviceID(r.DeviceID) {
+		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
 	}
 	if r.Cursor < 0 {
 		return httpapi.InvalidRequest("cursor must be greater than or equal to zero.")
@@ -242,11 +249,11 @@ func (m *Operation) FromRequest(request ClientOperation) error {
 
 // Entity converts a client operation into its append-only change entity after
 // the service has supplied authenticated and versioning context.
-func (op ClientOperation) Entity(ownerID, deviceID uuid.UUID, blockID *uuid.UUID, baseVersion, resultingVersion int64) (store.InsertNoteChangeParams, error) {
+func (op ClientOperation) Entity(ownerID uuid.UUID, deviceID string, blockID *uuid.UUID, baseVersion, resultingVersion int64) (store.InsertNoteChangeParams, error) {
 	if err := op.Validate(); err != nil {
 		return store.InsertNoteChangeParams{}, err
 	}
-	if ownerID == uuid.Nil || deviceID == uuid.Nil {
+	if ownerID == uuid.Nil || !constants.ValidDeviceID(deviceID) {
 		return store.InsertNoteChangeParams{}, errors.New("owner and device identifiers are required")
 	}
 	if (op.OperationType == OperationCreateBlock || op.OperationType == OperationDeleteBlock || op.OperationType == OperationModifyBlock) && (blockID == nil || *blockID == uuid.Nil) {
@@ -511,7 +518,7 @@ func (m NoteModel) Entity() (store.NoteDocument, error) {
 
 // FromEntity maps a persistence change into the pulled-change response.
 func (c *PulledChange) FromEntity(entity store.NoteChange) error {
-	if entity.ID == uuid.Nil || entity.ClientOperationID == uuid.Nil || entity.DeviceID == uuid.Nil {
+	if entity.ID == uuid.Nil || entity.ClientOperationID == uuid.Nil || !constants.ValidDeviceID(entity.DeviceID) {
 		return errors.New("change entity must contain valid identifiers")
 	}
 	*c = PulledChange{

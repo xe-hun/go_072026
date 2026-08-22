@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/google/uuid"
-
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
 )
@@ -28,11 +26,7 @@ func (h *Handler) PullHTTP(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.InvalidRequest("protocolVersion must be an integer."))
 		return
 	}
-	deviceID, err := uuid.Parse(query.Get("deviceId"))
-	if err != nil {
-		httpapi.WriteError(w, r, httpapi.InvalidRequest("deviceId must be a UUID."))
-		return
-	}
+	deviceID := query.Get("deviceId")
 	cursor, err := strconv.ParseInt(query.Get("cursor"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, r, httpapi.InvalidRequest("cursor must be an integer."))

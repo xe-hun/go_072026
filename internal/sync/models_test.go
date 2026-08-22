@@ -37,13 +37,20 @@ func TestSyncResponseContracts(t *testing.T) {
 }
 
 func TestPullRequestValidate(t *testing.T) {
-	valid := PullRequest{ProtocolVersion: ProtocolVersion, DeviceID: uuid.New(), Cursor: 0}
+	valid := PullRequest{ProtocolVersion: ProtocolVersion, DeviceID: "laptop-main", Cursor: 0}
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	valid.Cursor = -1
 	if err := valid.Validate(); err == nil {
 		t.Fatal("expected a negative cursor to be rejected")
+	}
+}
+
+func TestRequestValidateRejectsLongDeviceID(t *testing.T) {
+	request := Request{ProtocolVersion: ProtocolVersion, DeviceID: "1234567890123456789012345678901"}
+	if err := request.Validate(10); err == nil {
+		t.Fatal("expected a device ID longer than 30 characters to be rejected")
 	}
 }
 
