@@ -85,15 +85,15 @@ func TestDecodeChangeObjectRejectsNonObject(t *testing.T) {
 	}
 }
 
-// TestDecodeTextChangeRequiresDirectShape verifies the text delta object
+// TestDecodeTextDeltaRequiresDirectShape verifies the text delta object
 // expected by modify_note_title and modify_block.
-func TestDecodeTextChangeRequiresDirectShape(t *testing.T) {
-	change, err := decodeTextChange(json.RawMessage(`{"textOperation":"insert","index":1,"text":"e"}`), "changeData")
+func TestDecodeTextDeltaRequiresDirectShape(t *testing.T) {
+	delta, err := decodeTextDelta(json.RawMessage(`{"index":1,"deleteCount":0,"insertText":"e"}`), "changeData")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if change.TextOperation != TextOperationInsert || change.Index != 1 || change.Text != "e" {
-		t.Fatalf("unexpected text change: %+v", change)
+	if delta.Index != 1 || delta.DeleteCount != 0 || delta.InsertText != "e" {
+		t.Fatalf("unexpected text delta: %+v", delta)
 	}
 }
 
@@ -129,9 +129,9 @@ func TestValidateBlockType(t *testing.T) {
 	}
 }
 
-// TestApplyTextDeltaInsertAndDelete verifies text delta semantics.
-func TestApplyTextDeltaInsertAndDelete(t *testing.T) {
-	inserted, err := applyTextDelta("helo", "l", TextOperationInsert, 2)
+// TestApplyTextDeltaReplace verifies text delta semantics.
+func TestApplyTextDeltaReplace(t *testing.T) {
+	inserted, err := applyTextDelta("helo", TextDelta{Index: 2, InsertText: "l"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestApplyTextDeltaInsertAndDelete(t *testing.T) {
 		t.Fatalf("inserted text = %q, want hello", inserted)
 	}
 
-	deleted, err := applyTextDelta("hello", "ll", TextOperationDelete, 2)
+	deleted, err := applyTextDelta("hello", TextDelta{Index: 2, DeleteCount: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestApplyTextDeltaInsertAndDelete(t *testing.T) {
 
 // TestApplyTextDeltaUsesRuneIndexes avoids corrupting multibyte text.
 func TestApplyTextDeltaUsesRuneIndexes(t *testing.T) {
-	got, err := applyTextDelta("hllo", "é", TextOperationInsert, 1)
+	got, err := applyTextDelta("hllo", TextDelta{Index: 1, InsertText: "é"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,16 @@ func TestApplyTextDeltaUsesRuneIndexes(t *testing.T) {
 // TestApplyTextDeltaRejectsInvalidDeleteRange protects the current block text
 // from out-of-range client indexes.
 func TestApplyTextDeltaRejectsInvalidDeleteRange(t *testing.T) {
-	if _, err := applyTextDelta("hi", "long", TextOperationDelete, 1); err == nil {
+	if _, err := applyTextDelta("hi", TextDelta{Index: 1, DeleteCount: 4}); err == nil {
 		t.Fatal("expected invalid delete range to fail")
+	}
+}
+
+func TestApplyTextDeltaRejectsInvalidIndexAndDeleteCount(t *testing.T) {
+	if _, err := applyTextDelta("hi", TextDelta{Index: -1}); err == nil {
+		t.Fatal("expected negative index to fail")
+	}
+	if _, err := applyTextDelta("hi", TextDelta{Index: 1, DeleteCount: -1}); err == nil {
+		t.Fatal("expected negative delete count to fail")
 	}
 }

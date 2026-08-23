@@ -133,12 +133,12 @@ func TestBlockMutationFromRequestUsesChangedPropertiesAndTextDelta(t *testing.T)
 	err := mutation.FromRequest(json.RawMessage(`{
 		"id":"`+blockID.String()+`",
 		"changedProperties":{"checked":true},
-		"textDelta":{"textOperation":"insert","index":0,"text":"x"}
+		"textDelta":{"index":0,"deleteCount":0,"insertText":"x"}
 	}`), OperationModifyBlock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mutation.ID != blockID || !mutation.HasProperties || !mutation.HasTextChange {
+	if mutation.ID != blockID || !mutation.HasProperties || !mutation.HasTextDelta {
 		t.Fatalf("unexpected block mutation: %+v", mutation)
 	}
 	if string(mutation.ChangedProperties["checked"]) != "true" {

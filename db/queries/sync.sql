@@ -35,6 +35,16 @@ WHERE owner_id = $1
 ORDER BY global_sequence ASC
 LIMIT $4;
 
+-- name: HasChangesAfterCursor :one
+-- Checks for remote changes after a device cursor.
+SELECT EXISTS (
+    SELECT 1
+    FROM note_changes
+    WHERE owner_id = $1
+      AND global_sequence > $2
+      AND device_id <> $3
+);
+
 -- name: CountChangesSinceLastSnapshot :one
 -- Counts unsnapshotted changes for snapshot threshold checks.
 SELECT COUNT(*)::bigint

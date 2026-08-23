@@ -22,8 +22,6 @@ const (
 	OperationCreateCategory     = constants.OperationCreateCategory
 	OperationDeleteCategory     = constants.OperationDeleteCategory
 	OperationModifyCategory     = constants.OperationModifyCategory
-	TextOperationInsert         = constants.TextOperationInsert
-	TextOperationDelete         = constants.TextOperationDelete
 	ChangeFormatStructuredV1    = constants.ChangeFormatStructuredV1
 )
 
@@ -37,12 +35,12 @@ var allowedBlockTypes = map[string]struct{}{
 	constants.BlockTypeAttachment:   {},
 }
 
-// TextChange is the direct text delta shape used by modify_note_title and the
+// TextDelta is the direct text delta shape used by modify_note_title and the
 // nested modify_block.textDelta payload.
-type TextChange struct {
-	TextOperation string
-	Index         int
-	Text          string
+type TextDelta struct {
+	Index       int    `json:"index"`
+	DeleteCount int    `json:"deleteCount"`
+	InsertText  string `json:"insertText"`
 }
 
 // normalizeChangeFormat treats an omitted changeFormat as the v1 default.
@@ -175,37 +173,37 @@ func getUUIDField(fields map[string]json.RawMessage, key string) (uuid.UUID, boo
 	return id, true, nil
 }
 
-// decodeTextChange decodes a full text operation object.
-func decodeTextChange(raw json.RawMessage, name string) (TextChange, error) {
+// decodeTextDelta decodes a full text delta object.
+func decodeTextDelta(raw json.RawMessage, name string) (TextDelta, error) {
 	fields, err := decodeObjectFields(raw, name)
 	if err != nil {
-		return TextChange{}, err
-	}
-	textOperation, ok, err := getStringField(fields, constants.RequestKeyTextOperation)
-	if err != nil {
-		return TextChange{}, err
-	}
-	if !ok {
-		return TextChange{}, fmt.Errorf("%s is required", constants.RequestKeyTextOperation)
-	}
-	text, ok, err := getStringField(fields, constants.RequestKeyText)
-	if err != nil {
-		return TextChange{}, err
-	}
-	if !ok {
-		return TextChange{}, fmt.Errorf("%s is required", constants.RequestKeyText)
+		return TextDelta{}, err
 	}
 	index, ok, err := getIntField(fields, constants.RequestKeyIndex)
 	if err != nil {
-		return TextChange{}, err
+		return TextDelta{}, err
 	}
 	if !ok {
-		return TextChange{}, fmt.Errorf("%s is required", constants.RequestKeyIndex)
+		return TextDelta{}, fmt.Errorf("%s is required", constants.RequestKeyIndex)
 	}
-	return TextChange{
-		TextOperation: textOperation,
-		Index:         index,
-		Text:          text,
+	deleteCount, ok, err := getIntField(fields, constants.RequestKeyDeleteCount)
+	if err != nil {
+		return TextDelta{}, err
+	}
+	if !ok {
+		return TextDelta{}, fmt.Errorf("%s is required", constants.RequestKeyDeleteCount)
+	}
+	insertText, ok, err := getStringField(fields, constants.RequestKeyInsertText)
+	if err != nil {
+		return TextDelta{}, err
+	}
+	if !ok {
+		return TextDelta{}, fmt.Errorf("%s is required", constants.RequestKeyInsertText)
+	}
+	return TextDelta{
+		Index:       index,
+		DeleteCount: deleteCount,
+		InsertText:  insertText,
 	}, nil
 }
 

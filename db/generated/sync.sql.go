@@ -123,6 +123,30 @@ func (q *Queries) GetChangesAfterCursor(ctx context.Context, arg GetChangesAfter
 	return items, nil
 }
 
+const hasChangesAfterCursor = `-- name: HasChangesAfterCursor :one
+SELECT EXISTS (
+    SELECT 1
+    FROM note_changes
+    WHERE owner_id = $1
+      AND global_sequence > $2
+      AND device_id <> $3
+)
+`
+
+type HasChangesAfterCursorParams struct {
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	GlobalSequence pgtype.Int8 `json:"global_sequence"`
+	DeviceID       string      `json:"device_id"`
+}
+
+// Checks for remote changes after a device cursor.
+func (q *Queries) HasChangesAfterCursor(ctx context.Context, arg HasChangesAfterCursorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasChangesAfterCursor, arg.OwnerID, arg.GlobalSequence, arg.DeviceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertNoteChange = `-- name: InsertNoteChange :one
 INSERT INTO note_changes (
     id,

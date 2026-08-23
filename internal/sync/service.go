@@ -158,6 +158,29 @@ func (s *Service) Pull(ctx context.Context, ownerID uuid.UUID, req PullRequest) 
 	return resp, err
 }
 
+// UpdatesAvailable reports whether a device has remote changes after its
+// persisted sync cursor.
+func (s *Service) UpdatesAvailable(ctx context.Context, ownerID uuid.UUID, req UpdatesAvailableRequest) (UpdatesAvailableResponse, error) {
+	if err := req.Validate(); err != nil {
+		return UpdatesAvailableResponse{}, err
+	}
+	device, err := s.store.GetDeviceForOwner(ctx, req.DeviceID, ownerID)
+	if errors.Is(err, store.ErrNotFound) {
+		return UpdatesAvailableResponse{}, httpapi.Forbidden("Device does not belong to the authenticated user.")
+	}
+	if err != nil {
+		return UpdatesAvailableResponse{}, err
+	}
+	if device.RevokedAt.Valid {
+		return UpdatesAvailableResponse{}, httpapi.NewError(http.StatusForbidden, httpapi.CodeDeviceRevoked, "Device has been revoked.")
+	}
+	available, err := s.store.HasChangesAfterCursor(ctx, ownerID, device.LastGlobalCursor, req.DeviceID)
+	if err != nil {
+		return UpdatesAvailableResponse{}, err
+	}
+	return UpdatesAvailableResponse{UpdatesAvailable: available}, nil
+}
+
 // sortedOperations returns a copy ordered by note id and then client sequence.
 // Equal note/sequence pairs keep request order.
 func sortedOperations(operations []ClientOperation) []ClientOperation {
@@ -563,7 +586,7 @@ func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID 
 	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
 		return nil, rejected, err
 	}
-	title, err := applyTextDelta(state.note.Title, mutation.TextChange.Text, mutation.TextChange.TextOperation, mutation.TextChange.Index)
+	title, err := applyTextDelta(state.note.Title, mutation.TextDelta)
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
@@ -680,8 +703,8 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 		}
 		block.BlockProperties = blockProperties
 	}
-	if mutation.HasTextChange {
-		text, err := applyTextDelta(block.TextContent, mutation.TextChange.Text, mutation.TextChange.TextOperation, mutation.TextChange.Index)
+	if mutation.HasTextDelta {
+		text, err := applyTextDelta(block.TextContent, mutation.TextDelta)
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
@@ -692,35 +715,26 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &blockID)
 }
 
-// applyTextDelta applies an insert/delete to text using rune indexes. The
-// delete length is the length of text.
-func applyTextDelta(current, delta, operationType string, index int) (string, error) {
-	if index < 0 {
-		return "", errors.New(constants.RequestKeyIndex + " must be greater than or equal to zero")
+// applyTextDelta replaces deleteCount runes at index with insertText.
+func applyTextDelta(text string, delta TextDelta) (string, error) {
+	textRunes := []rune(text)
+	if delta.Index < 0 || delta.Index > len(textRunes) {
+		return "", errors.New("Text delta index is out of range.")
 	}
-	textRunes := []rune(current)
-	deltaRunes := []rune(delta)
-	switch operationType {
-	case TextOperationInsert:
-		if index > len(textRunes) {
-			return "", errors.New(constants.RequestKeyIndex + " is outside the current text")
-		}
-		next := make([]rune, 0, len(textRunes)+len(deltaRunes))
-		next = append(next, textRunes[:index]...)
-		next = append(next, deltaRunes...)
-		next = append(next, textRunes[index:]...)
-		return string(next), nil
-	case TextOperationDelete:
-		if index > len(textRunes) || index+len(deltaRunes) > len(textRunes) {
-			return "", errors.New("delete range is outside the current " + constants.RequestKeyText)
-		}
-		next := make([]rune, 0, len(textRunes)-len(deltaRunes))
-		next = append(next, textRunes[:index]...)
-		next = append(next, textRunes[index+len(deltaRunes):]...)
-		return string(next), nil
-	default:
-		return "", errors.New(constants.RequestKeyTextOperation + " must be insert or delete")
+	if delta.DeleteCount < 0 {
+		return "", errors.New("Text delta delete count is invalid.")
 	}
+	if delta.DeleteCount > len(textRunes)-delta.Index {
+		return "", errors.New("Text delta delete range is out of range.")
+	}
+
+	insertRunes := []rune(delta.InsertText)
+	end := delta.Index + delta.DeleteCount
+	result := make([]rune, 0, len(textRunes)-delta.DeleteCount+len(insertRunes))
+	result = append(result, textRunes[:delta.Index]...)
+	result = append(result, insertRunes...)
+	result = append(result, textRunes[end:]...)
+	return string(result), nil
 }
 
 func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMessage, name string) (json.RawMessage, error) {

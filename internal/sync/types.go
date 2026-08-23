@@ -30,6 +30,13 @@ type PullRequest struct {
 	Cursor          int64
 }
 
+// UpdatesAvailableRequest contains the query parameters accepted by the
+// device update availability endpoint.
+type UpdatesAvailableRequest struct {
+	ProtocolVersion int
+	DeviceID        string
+}
+
 // ClientOperation is one idempotent note, block, or category mutation
 // submitted by a device.
 type ClientOperation struct {
@@ -64,6 +71,12 @@ type PullResponse struct {
 	Changes    []PulledChange `json:"changes"`
 	HasMore    bool           `json:"hasMore"`
 	NextCursor int64          `json:"nextCursor"`
+}
+
+// UpdatesAvailableResponse is returned by the device update availability
+// check.
+type UpdatesAvailableResponse struct {
+	UpdatesAvailable bool `json:"updatesAvailable"`
 }
 
 // AcceptedDTO reports the resulting version for an accepted note batch.

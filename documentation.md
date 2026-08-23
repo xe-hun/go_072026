@@ -120,6 +120,7 @@ Authenticated routes:
 - `GET /v1/devices`
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
+- `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 
@@ -181,6 +182,10 @@ The service:
 16. Updates the device cursor and last seen timestamp.
 17. Commits the transaction.
 18. Returns accepted and rejected DTOs, pulled changes, next cursor, and pagination state.
+
+Clients can call `GET /v1/sync/updates-available` with a protocol version and
+device ID to check the authenticated user's persisted device cursor without
+pulling change records. The response is `{ "updatesAvailable": true|false }`.
 
 A valid sync request can have both accepted and rejected note batches. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
 

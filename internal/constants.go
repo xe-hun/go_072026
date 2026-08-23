@@ -25,11 +25,11 @@ const (
 	RequestKeyPlatform        = "platform"
 	RequestKeyAppVersion      = "appVersion"
 
-	//textDelta
-	RequestKeyTextDelta     = "textDelta"
-	RequestKeyText          = "text"
-	RequestKeyIndex         = "index"
-	RequestKeyTextOperation = "textOperation"
+	// Text delta fields.
+	RequestKeyTextDelta   = "textDelta"
+	RequestKeyIndex       = "index"
+	RequestKeyDeleteCount = "deleteCount"
+	RequestKeyInsertText  = "insertText"
 
 	//note Properties
 	RequestKeyNoteID            = "noteId"
@@ -71,10 +71,6 @@ const (
 	OperationCreateCategory = "createCategory"
 	OperationDeleteCategory = "deleteCategory"
 	OperationModifyCategory = "modifyCategory"
-
-	// Text operation names accepted by title and block text deltas.
-	TextOperationInsert = "insert"
-	TextOperationDelete = "delete"
 
 	// ChangeFormatStructuredV1 stores changed fields rather than raw character
 	// diffs.

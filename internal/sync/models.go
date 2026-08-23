@@ -52,6 +52,20 @@ func (r PullRequest) Validate() error {
 	return nil
 }
 
+// Validate checks update availability query parameters.
+func (r UpdatesAvailableRequest) Validate() error {
+	if r.ProtocolVersion != ProtocolVersion {
+		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
+	}
+	if r.DeviceID == "" {
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
+	}
+	if !constants.ValidDeviceID(r.DeviceID) {
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
+	}
+	return nil
+}
+
 // Validate checks operation-level invariants before database state is read.
 func (op ClientOperation) Validate() error {
 	if op.OperationID == uuid.Nil {
@@ -92,8 +106,8 @@ type Operation struct {
 type NoteMutation struct {
 	NoteProperties map[string]json.RawMessage
 	HasProperties  bool
-	TextChange     TextChange
-	HasTextChange  bool
+	TextDelta      TextDelta
+	HasTextDelta   bool
 }
 
 // FromRequest parses and validates a note mutation payload.
@@ -128,11 +142,11 @@ func (m *NoteMutation) FromRequest(raw json.RawMessage, operationType string) er
 		if !ok {
 			return fmt.Errorf("%s requires %s", OperationModifyNoteTitle, constants.RequestKeyTextDelta)
 		}
-		m.TextChange, err = decodeTextChange(textDelta, constants.RequestKeyTextDelta)
+		m.TextDelta, err = decodeTextDelta(textDelta, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
-		m.HasTextChange = true
+		m.HasTextDelta = true
 	case OperationDeleteNote:
 		return nil
 	default:
@@ -146,8 +160,8 @@ type BlockMutation struct {
 	ID                uuid.UUID
 	ChangedProperties map[string]json.RawMessage
 	HasProperties     bool
-	TextChange        TextChange
-	HasTextChange     bool
+	TextDelta         TextDelta
+	HasTextDelta      bool
 }
 
 // FromRequest parses and validates a block mutation payload.
@@ -186,13 +200,13 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 		return err
 	}
 	if hasTextDelta {
-		m.TextChange, err = decodeTextChange(textDelta, constants.RequestKeyTextDelta)
+		m.TextDelta, err = decodeTextDelta(textDelta, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
-		m.HasTextChange = true
+		m.HasTextDelta = true
 	}
-	if !hasProperties && !m.HasTextChange {
+	if !hasProperties && !m.HasTextDelta {
 		return fmt.Errorf("%s must include %s or %s", OperationModifyBlock, constants.RequestKeyChangedProperties, constants.RequestKeyTextDelta)
 	}
 	m.HasProperties = hasProperties

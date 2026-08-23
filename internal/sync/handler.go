@@ -9,7 +9,8 @@ import (
 	"notes-server/internal/httpapi"
 )
 
-// Handler is the HTTP adapter for POST and GET /v1/sync.
+// Handler is the HTTP adapter for POST and GET /v1/sync and the update
+// availability check.
 type Handler struct {
 	service *Service
 }
@@ -38,6 +39,31 @@ func (h *Handler) PullHTTP(w http.ResponseWriter, r *http.Request) {
 		ClientVersion:   query.Get(constants.RequestKeyClientVersion),
 		DeviceID:        deviceID,
 		Cursor:          cursor,
+	})
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, resp)
+}
+
+// UpdatesAvailableHTTP checks whether the authenticated user's device has
+// remote changes after its persisted cursor.
+func (h *Handler) UpdatesAvailableHTTP(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpapi.WriteError(w, r, httpapi.Unauthorized())
+		return
+	}
+	query := r.URL.Query()
+	protocolVersion, err := strconv.Atoi(query.Get(constants.RequestKeyProtocolVersion))
+	if err != nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyProtocolVersion+" must be an integer."))
+		return
+	}
+	resp, err := h.service.UpdatesAvailable(r.Context(), ownerID, UpdatesAvailableRequest{
+		ProtocolVersion: protocolVersion,
+		DeviceID:        query.Get(constants.RequestKeyDeviceID),
 	})
 	if err != nil {
 		httpapi.WriteError(w, r, err)

@@ -66,6 +66,16 @@ func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cu
 	return changes, nil
 }
 
+// HasChangesAfterCursor reports whether remote changes exist after a device's
+// cursor for one owner.
+func (s *Store) HasChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID string) (bool, error) {
+	return s.q.HasChangesAfterCursor(ctx, db.HasChangesAfterCursorParams{
+		OwnerID:        pgUUID(ownerID),
+		GlobalSequence: pgtype.Int8{Int64: cursor, Valid: true},
+		DeviceID:       excludeDeviceID,
+	})
+}
+
 // CountChangesSinceLastSnapshot measures snapshot eligibility by change count.
 func (s *Store) CountChangesSinceLastSnapshot(ctx context.Context, noteID uuid.UUID) (int64, error) {
 	return s.q.CountChangesSinceLastSnapshot(ctx, pgUUID(noteID))

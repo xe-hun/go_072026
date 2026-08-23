@@ -80,6 +80,7 @@ VS Code debug configurations are included for the API and worker in `.vscode/lau
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
 - `GET /v1/sync?protocolVersion=1&clientVersion=...&deviceId=...&cursor=...`
+- `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 
@@ -100,11 +101,14 @@ include a per-note integer `sequence`; the server sorts by `noteId` and then
 The sync GET endpoint pulls remote changes after its query-string cursor. It
 returns `changes`, `hasMore`, and `nextCursor`; pulled changes expose
 `globalSequence` and `resultingNoteVersion`, and omit `operationId` and `blockId`.
+The updates-available endpoint uses the authenticated user's persisted device
+cursor and returns `updatesAvailable` without fetching the change records.
 
 `modify_note_property` writes the supplied `noteProperties` object into the
 note, `modify_note_title` receives a nested `textDelta`, `create_block` receives
 a nested `block`, and `modify_block` receives `changedProperties` plus an
-optional nested `textDelta`. Block IDs are
+optional nested `textDelta`. Each `textDelta` is
+`{"index":0,"deleteCount":0,"insertText":"..."}`. Block IDs are
 inside each operation's `changeData`. `create_category`, `modify_category`, and `delete_category` use
 `{id,name}` or `{id}` payloads respectively; note categories are metadata,
 not note columns. Current state updates and change-log inserts happen inside

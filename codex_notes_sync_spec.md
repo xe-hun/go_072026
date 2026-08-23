@@ -368,8 +368,8 @@ Operation payloads use direct operation-specific objects:
 }
 ```
 
-`modify_note_title` uses `{ "textDelta": { "textOperation": "insert",
-"index": 8, "text": " and bread" } }`.
+`modify_note_title` uses `{ "textDelta": { "index": 8, "deleteCount": 0,
+"insertText": " and bread" } }`.
 `create_block` uses `{ "block": { "id": "uuid", "blockType": "text", "position": 1.0, "textContent": "...", "blockProperties": {} } }`,
 `delete_block` uses `{ "id": "uuid" }`, and
 `modify_block` uses `changedProperties` and `textDelta` in the same direct object.
@@ -500,9 +500,9 @@ Accept-Encoding: gzip
       "changeData": {
         "id": "uuid",
         "textDelta": {
-          "textOperation": "insert",
           "index": 13,
-          "text": "Updated text"
+          "deleteCount": 0,
+          "insertText": "Updated text"
         }
       }
     }
@@ -683,6 +683,7 @@ Initial endpoints:
 POST /v1/devices
 DELETE /v1/devices/{deviceId}
 GET /v1/devices
+GET /v1/sync/updates-available?protocolVersion=1&deviceId=...
 ```
 
 ---
@@ -698,6 +699,7 @@ POST   /v1/devices
 GET    /v1/devices
 DELETE /v1/devices/{deviceId}
 POST   /v1/sync
+GET    /v1/sync/updates-available?protocolVersion=1&deviceId=...
 GET    /v1/notes/{noteId}
 GET    /v1/notes/{noteId}/snapshot
 ```
