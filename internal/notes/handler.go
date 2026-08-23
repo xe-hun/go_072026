@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	constants "notes-server/internal"
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
 )
@@ -23,8 +24,8 @@ func NewHandler(service *Service) *Handler {
 // Routes returns the note subrouter.
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/{noteId}", h.get)
-	r.Get("/{noteId}/snapshot", h.snapshot)
+	r.Get("/{"+constants.RequestKeyNoteID+"}", h.get)
+	r.Get("/{"+constants.RequestKeyNoteID+"}/snapshot", h.snapshot)
 	return r
 }
 
@@ -35,7 +36,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Unauthorized())
 		return
 	}
-	noteID, err := uuid.Parse(chi.URLParam(r, "noteId"))
+	noteID, err := uuid.Parse(chi.URLParam(r, constants.RequestKeyNoteID))
 	if err != nil {
 		httpapi.WriteError(w, r, httpapi.InvalidRequest("Note ID must be a UUID."))
 		return
@@ -55,7 +56,7 @@ func (h *Handler) snapshot(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Unauthorized())
 		return
 	}
-	noteID, err := uuid.Parse(chi.URLParam(r, "noteId"))
+	noteID, err := uuid.Parse(chi.URLParam(r, constants.RequestKeyNoteID))
 	if err != nil {
 		httpapi.WriteError(w, r, httpapi.InvalidRequest("Note ID must be a UUID."))
 		return

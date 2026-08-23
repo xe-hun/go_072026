@@ -62,10 +62,10 @@ func (s *Service) List(ctx context.Context, ownerID uuid.UUID) (ListDevicesRespo
 // rejected by the sync service.
 func (s *Service) Revoke(ctx context.Context, ownerID uuid.UUID, deviceID string) error {
 	if deviceID == "" {
-		return httpapi.InvalidRequest("deviceId is required.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
 	}
 	if !constants.ValidDeviceID(deviceID) {
-		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 	err := s.store.RevokeDevice(ctx, deviceID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {

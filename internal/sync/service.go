@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	constants "notes-server/internal"
 	"notes-server/internal/config"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
@@ -372,7 +373,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID u
 		accepted, rejected, err := s.modifyCategory(ctx, tx, ownerID, deviceID, op)
 		return state, accepted, rejected, rejected == nil, err
 	default:
-		rejected := rejectedInvalid(op, "operationType is unsupported.")
+		rejected := rejectedInvalid(op, constants.RequestKeyOperationType+" is unsupported.")
 		return state, nil, &rejected, false, nil
 	}
 }
@@ -544,7 +545,7 @@ func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, owner
 	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
 		return nil, rejected, err
 	}
-	noteProperties, err := mergeJSONProperties(state.note.NoteProperties, mutation.NoteProperties, "noteProperties")
+	noteProperties, err := mergeJSONProperties(state.note.NoteProperties, mutation.NoteProperties, constants.RequestKeyNoteProperties)
 	if err != nil {
 		rejected := rejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
@@ -672,7 +673,7 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 		return nil, nil, err
 	}
 	if mutation.HasProperties && len(mutation.ChangedProperties) > 0 {
-		blockProperties, err := mergeJSONProperties(block.BlockProperties, mutation.ChangedProperties, "blockProperties")
+		blockProperties, err := mergeJSONProperties(block.BlockProperties, mutation.ChangedProperties, constants.RequestKeyBlockProperties)
 		if err != nil {
 			rejected := rejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
@@ -695,14 +696,14 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 // delete length is the length of text.
 func applyTextDelta(current, delta, operationType string, index int) (string, error) {
 	if index < 0 {
-		return "", errors.New("index must be greater than or equal to zero")
+		return "", errors.New(constants.RequestKeyIndex + " must be greater than or equal to zero")
 	}
 	textRunes := []rune(current)
 	deltaRunes := []rune(delta)
 	switch operationType {
 	case TextOperationInsert:
 		if index > len(textRunes) {
-			return "", errors.New("index is outside the current text")
+			return "", errors.New(constants.RequestKeyIndex + " is outside the current text")
 		}
 		next := make([]rune, 0, len(textRunes)+len(deltaRunes))
 		next = append(next, textRunes[:index]...)
@@ -711,14 +712,14 @@ func applyTextDelta(current, delta, operationType string, index int) (string, er
 		return string(next), nil
 	case TextOperationDelete:
 		if index > len(textRunes) || index+len(deltaRunes) > len(textRunes) {
-			return "", errors.New("delete range is outside the current text")
+			return "", errors.New("delete range is outside the current " + constants.RequestKeyText)
 		}
 		next := make([]rune, 0, len(textRunes)-len(deltaRunes))
 		next = append(next, textRunes[:index]...)
 		next = append(next, textRunes[index+len(deltaRunes):]...)
 		return string(next), nil
 	default:
-		return "", errors.New("textOperation must be insert or delete")
+		return "", errors.New(constants.RequestKeyTextOperation + " must be insert or delete")
 	}
 }
 

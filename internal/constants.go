@@ -8,32 +8,73 @@ const (
 	// a client-supplied device identifier.
 	DeviceIDMaxLength = 30
 
-	// Note operation names.
-	OperationCreateNote         = "create_note"
-	OperationDeleteNote         = "delete_note"
-	OperationModifyNoteProperty = "modify_note_property"
-	OperationModifyNoteTitle    = "modify_note_title"
+	//commonkeys
+	RequestKeyID = "id"
 
-	// Block operation names.
-	OperationCreateBlock = "create_block"
-	OperationDeleteBlock = "delete_block"
-	OperationModifyBlock = "modify_block"
+	// Request field names. Keep these values together so request parsing,
+	// validation, and debugging use one canonical spelling.
+	RequestKeyProtocolVersion = "protocolVersion"
+	RequestKeyClientVersion   = "clientVersion"
+	RequestKeyDeviceID        = "deviceId"
+	RequestKeyOperations      = "operations"
+	RequestKeyOperationID     = "operationId"
+	RequestKeyOperationType   = "operationType"
+	RequestKeyChangeFormat    = "changeFormat"
+	RequestKeyCursor          = "cursor"
+	RequestKeyDeviceName      = "deviceName"
+	RequestKeyPlatform        = "platform"
+	RequestKeyAppVersion      = "appVersion"
 
-	// Category operation names.
-	OperationCreateCategory = "create_category"
-	OperationDeleteCategory = "delete_category"
-	OperationModifyCategory = "modify_category"
+	//textDelta
+	RequestKeyTextDelta     = "textDelta"
+	RequestKeyText          = "text"
+	RequestKeyIndex         = "index"
+	RequestKeyTextOperation = "textOperation"
 
-	// Text operation names accepted by title and block text deltas.
-	TextOperationInsert = "insert"
-	TextOperationDelete = "delete"
+	//note Properties
+	RequestKeyNoteID            = "noteId"
+	RequestKeySequence          = "sequence"
+	RequestKeyTitle             = "title"
+	RequestKeyBaseNoteVersion   = "baseNoteVersion"
+	RequestKeyChangeData        = "changeData"
+	RequestKeyNoteProperties    = "noteProperties"
+	RequestKeyChangedProperties = "changedProperties"
+	RequestKeyName              = "CategoryName"
+	RequestKeyTextContent       = "textContent"
+	RequestKeyBlocks            = "blocks"
+
+	//block Properties
+	RequestKeyBlock           = "block"
+	RequestKeyBlockType       = "blockType"
+	RequestKeyPosition        = "position"
+	RequestKeyBlockProperties = "blockProperties"
 
 	// Supported block types.
 	BlockTypeText         = "text"
 	BlockTypeBullet       = "bullet"
 	BlockTypeTodo         = "todo"
-	BlockTypeNumberedList = "numbered_list"
+	BlockTypeNumberedList = "numberedList"
 	BlockTypeAttachment   = "attachment"
+
+	// Note operation names.
+	OperationCreateNote         = "createNote"
+	OperationDeleteNote         = "deleteNote"
+	OperationModifyNoteProperty = "modifyNoteProperty"
+	OperationModifyNoteTitle    = "modifyNoteTitle"
+
+	// Block operation names.
+	OperationCreateBlock = "createBlock"
+	OperationDeleteBlock = "deleteBlock"
+	OperationModifyBlock = "modifyBlock"
+
+	// Category operation names.
+	OperationCreateCategory = "createCategory"
+	OperationDeleteCategory = "deleteCategory"
+	OperationModifyCategory = "modifyCategory"
+
+	// Text operation names accepted by title and block text deltas.
+	TextOperationInsert = "insert"
+	TextOperationDelete = "delete"
 
 	// ChangeFormatStructuredV1 stores changed fields rather than raw character
 	// diffs.

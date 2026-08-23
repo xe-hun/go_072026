@@ -3,7 +3,6 @@ package syncapi
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -59,7 +58,7 @@ func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error)
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]json.RawMessage{}, nil
 	}
-	return decodeObjectFields(raw, "changeData")
+	return decodeObjectFields(raw, constants.RequestKeyChangeData)
 }
 
 // decodeObjectFields validates and decodes a JSON object into raw field values.
@@ -182,26 +181,26 @@ func decodeTextChange(raw json.RawMessage, name string) (TextChange, error) {
 	if err != nil {
 		return TextChange{}, err
 	}
-	textOperation, ok, err := getStringField(fields, "textOperation")
+	textOperation, ok, err := getStringField(fields, constants.RequestKeyTextOperation)
 	if err != nil {
 		return TextChange{}, err
 	}
 	if !ok {
-		return TextChange{}, errors.New("textOperation is required")
+		return TextChange{}, fmt.Errorf("%s is required", constants.RequestKeyTextOperation)
 	}
-	text, ok, err := getStringField(fields, "text")
+	text, ok, err := getStringField(fields, constants.RequestKeyText)
 	if err != nil {
 		return TextChange{}, err
 	}
 	if !ok {
-		return TextChange{}, errors.New("text is required")
+		return TextChange{}, fmt.Errorf("%s is required", constants.RequestKeyText)
 	}
-	index, ok, err := getIntField(fields, "index")
+	index, ok, err := getIntField(fields, constants.RequestKeyIndex)
 	if err != nil {
 		return TextChange{}, err
 	}
 	if !ok {
-		return TextChange{}, errors.New("index is required")
+		return TextChange{}, fmt.Errorf("%s is required", constants.RequestKeyIndex)
 	}
 	return TextChange{
 		TextOperation: textOperation,
@@ -217,7 +216,7 @@ func isJSONNull(raw json.RawMessage) bool {
 // validateBlockType enforces the block type allow-list.
 func validateBlockType(blockType string) error {
 	if _, ok := allowedBlockTypes[blockType]; !ok {
-		return fmt.Errorf("blockType %q is unsupported", blockType)
+		return fmt.Errorf("%s %q is unsupported", constants.RequestKeyBlockType, blockType)
 	}
 	return nil
 }

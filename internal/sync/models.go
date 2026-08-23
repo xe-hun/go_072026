@@ -24,10 +24,10 @@ func (r Request) Validate(maxOperations int) error {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
 	if r.DeviceID == "" {
-		return httpapi.InvalidRequest("deviceId is required.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
 	}
 	if !constants.ValidDeviceID(r.DeviceID) {
-		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 	if len(r.Operations) > maxOperations {
 		return httpapi.NewError(http.StatusRequestEntityTooLarge, httpapi.CodePayloadTooLarge, "The sync request contains too many operations.")
@@ -41,13 +41,13 @@ func (r PullRequest) Validate() error {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
 	if r.DeviceID == "" {
-		return httpapi.InvalidRequest("deviceId is required.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
 	}
 	if !constants.ValidDeviceID(r.DeviceID) {
-		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 	if r.Cursor < 0 {
-		return httpapi.InvalidRequest("cursor must be greater than or equal to zero.")
+		return httpapi.InvalidRequest(constants.RequestKeyCursor + " must be greater than or equal to zero.")
 	}
 	return nil
 }
@@ -55,29 +55,29 @@ func (r PullRequest) Validate() error {
 // Validate checks operation-level invariants before database state is read.
 func (op ClientOperation) Validate() error {
 	if op.OperationID == uuid.Nil {
-		return errors.New("operationId is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyOperationID)
 	}
 	if op.Sequence < 0 {
-		return errors.New("sequence must be greater than or equal to zero")
+		return fmt.Errorf("%s must be greater than or equal to zero", constants.RequestKeySequence)
 	}
 	switch op.OperationType {
 	case OperationCreateCategory, OperationDeleteCategory, OperationModifyCategory:
 		if op.NoteID != uuid.Nil {
-			return errors.New("noteId is not allowed for category operations")
+			return fmt.Errorf("%s is not allowed for category operations", constants.RequestKeyNoteID)
 		}
 	case OperationCreateNote, OperationDeleteNote, OperationModifyNoteProperty, OperationModifyNoteTitle:
 		if op.NoteID == uuid.Nil {
-			return errors.New("noteId is required")
+			return fmt.Errorf("%s is required", constants.RequestKeyNoteID)
 		}
 	case OperationCreateBlock, OperationDeleteBlock, OperationModifyBlock:
 		if op.NoteID == uuid.Nil {
-			return errors.New("noteId is required")
+			return fmt.Errorf("%s is required", constants.RequestKeyNoteID)
 		}
 	default:
-		return errors.New("operationType is unsupported")
+		return fmt.Errorf("%s is unsupported", constants.RequestKeyOperationType)
 	}
 	if normalizeChangeFormat(op.ChangeFormat) != ChangeFormatStructuredV1 {
-		return errors.New("changeFormat is unsupported")
+		return fmt.Errorf("%s is unsupported", constants.RequestKeyChangeFormat)
 	}
 	return nil
 }
@@ -98,37 +98,37 @@ type NoteMutation struct {
 
 // FromRequest parses and validates a note mutation payload.
 func (m *NoteMutation) FromRequest(raw json.RawMessage, operationType string) error {
-	fields, err := decodeObjectFields(raw, "changeData")
+	fields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
 	switch operationType {
 	case OperationModifyNoteProperty:
-		propertiesRaw, ok, err := getObjectField(fields, "noteProperties")
+		propertiesRaw, ok, err := getObjectField(fields, constants.RequestKeyNoteProperties)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			return errors.New("modify_note_property must include at least one property")
+			return fmt.Errorf("%s must include at least one property", OperationModifyNoteProperty)
 		}
-		properties, err := decodeObjectFields(propertiesRaw, "noteProperties")
+		properties, err := decodeObjectFields(propertiesRaw, constants.RequestKeyNoteProperties)
 		if err != nil {
 			return err
 		}
 		if len(properties) == 0 {
-			return errors.New("modify_note_property must include at least one property")
+			return fmt.Errorf("%s must include at least one property", OperationModifyNoteProperty)
 		}
 		m.NoteProperties = properties
 		m.HasProperties = true
 	case OperationModifyNoteTitle:
-		textDelta, ok, err := getObjectField(fields, "textDelta")
+		textDelta, ok, err := getObjectField(fields, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			return errors.New("modify_note_title requires textDelta")
+			return fmt.Errorf("%s requires %s", OperationModifyNoteTitle, constants.RequestKeyTextDelta)
 		}
-		m.TextChange, err = decodeTextChange(textDelta, "textDelta")
+		m.TextChange, err = decodeTextChange(textDelta, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
@@ -152,16 +152,16 @@ type BlockMutation struct {
 
 // FromRequest parses and validates a block mutation payload.
 func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) error {
-	fields, err := decodeObjectFields(raw, "changeData")
+	fields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, "id")
+	id, ok, err := getUUIDField(fields, constants.RequestKeyID)
 	if err != nil {
 		return err
 	}
 	if !ok || id == uuid.Nil {
-		return errors.New("id is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyID)
 	}
 	m.ID = id
 	if operationType == OperationDeleteBlock {
@@ -170,30 +170,30 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 	if operationType != OperationModifyBlock {
 		return errors.New("unsupported block mutation")
 	}
-	propertiesRaw, hasProperties := fields["changedProperties"]
+	propertiesRaw, hasProperties := fields[constants.RequestKeyChangedProperties]
 	if hasProperties && !isJSONNull(propertiesRaw) {
-		propertiesRaw, _, err = getObjectField(fields, "changedProperties")
+		propertiesRaw, _, err = getObjectField(fields, constants.RequestKeyChangedProperties)
 		if err != nil {
 			return err
 		}
-		m.ChangedProperties, err = decodeObjectFields(propertiesRaw, "changedProperties")
+		m.ChangedProperties, err = decodeObjectFields(propertiesRaw, constants.RequestKeyChangedProperties)
 		if err != nil {
 			return err
 		}
 	}
-	textDelta, hasTextDelta, err := getObjectField(fields, "textDelta")
+	textDelta, hasTextDelta, err := getObjectField(fields, constants.RequestKeyTextDelta)
 	if err != nil {
 		return err
 	}
 	if hasTextDelta {
-		m.TextChange, err = decodeTextChange(textDelta, "textDelta")
+		m.TextChange, err = decodeTextChange(textDelta, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
 		m.HasTextChange = true
 	}
 	if !hasProperties && !m.HasTextChange {
-		return errors.New("modify_block must include changedProperties or textDelta")
+		return fmt.Errorf("%s must include %s or %s", OperationModifyBlock, constants.RequestKeyChangedProperties, constants.RequestKeyTextDelta)
 	}
 	m.HasProperties = hasProperties
 	return nil
@@ -207,27 +207,27 @@ type Category struct {
 
 // FromRequest parses and validates a category payload.
 func (m *Category) FromRequest(raw json.RawMessage, requireName bool) error {
-	fields, err := decodeObjectFields(raw, "changeData")
+	fields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, "id")
+	id, ok, err := getUUIDField(fields, constants.RequestKeyID)
 	if err != nil {
 		return err
 	}
 	if !ok || id == uuid.Nil {
-		return errors.New("id is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyID)
 	}
 	m.ID = id
 	if !requireName {
 		return nil
 	}
-	name, ok, err := getStringField(fields, "name")
+	name, ok, err := getStringField(fields, constants.RequestKeyName)
 	if err != nil {
 		return err
 	}
 	if !ok || strings.TrimSpace(name) == "" {
-		return errors.New("name is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyName)
 	}
 	m.Name = name
 	return nil
@@ -240,7 +240,7 @@ func (m *Operation) FromRequest(request ClientOperation) error {
 	}
 	fields, err := decodeChangeObject(request.ChangeData)
 	if err != nil {
-		return errors.New("changeData is invalid.")
+		return fmt.Errorf("%s is invalid.", constants.RequestKeyChangeData)
 	}
 	m.ClientOperation = request
 	m.Fields = fields
@@ -291,57 +291,57 @@ func (m *BlockModel) FromCreateOperation(raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	block, ok, err := getObjectField(fields, "block")
+	block, ok, err := getObjectField(fields, constants.RequestKeyBlock)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("create_block requires block")
+		return fmt.Errorf("%s requires %s", OperationCreateBlock, constants.RequestKeyBlock)
 	}
 	return m.FromRequest(block)
 }
 
 // FromRequest parses and validates a direct block payload.
 func (m *BlockModel) FromRequest(raw json.RawMessage) error {
-	fields, err := decodeObjectFields(raw, "block")
+	fields, err := decodeObjectFields(raw, constants.RequestKeyBlock)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, "id")
+	id, ok, err := getUUIDField(fields, constants.RequestKeyID)
 	if err != nil {
 		return err
 	}
 	if !ok || id == uuid.Nil {
-		return errors.New("id is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyID)
 	}
-	blockType, ok, err := getStringField(fields, "blockType")
+	blockType, ok, err := getStringField(fields, constants.RequestKeyBlockType)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("blockType is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyBlockType)
 	}
 	if err := validateBlockType(blockType); err != nil {
 		return err
 	}
-	position, ok, err := getFloatField(fields, "position")
+	position, ok, err := getFloatField(fields, constants.RequestKeyPosition)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("position is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyPosition)
 	}
 	if position < 0 {
-		return errors.New("position must be greater than or equal to zero")
+		return fmt.Errorf("%s must be greater than or equal to zero", constants.RequestKeyPosition)
 	}
-	textContent, ok, err := getStringField(fields, "textContent")
+	textContent, ok, err := getStringField(fields, constants.RequestKeyTextContent)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("textContent is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyTextContent)
 	}
-	blockProperties, ok, err := getObjectField(fields, "blockProperties")
+	blockProperties, ok, err := getObjectField(fields, constants.RequestKeyBlockProperties)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,7 @@ func (m BlockModel) Entity(noteID uuid.UUID) (store.NoteBlock, error) {
 		return store.NoteBlock{}, err
 	}
 	if strings.TrimSpace(m.Position) == "" {
-		return store.NoteBlock{}, errors.New("position is required")
+		return store.NoteBlock{}, fmt.Errorf("%s is required", constants.RequestKeyPosition)
 	}
 	return store.NoteBlock{
 		ID:              m.ID,
@@ -412,26 +412,26 @@ func (m *NoteModel) FromRequest(op ClientOperation, ownerID uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	title, ok, err := getStringField(fields, "title")
+	title, ok, err := getStringField(fields, constants.RequestKeyTitle)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("title is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyTitle)
 	}
-	noteProperties, ok, err := getObjectField(fields, "noteProperties")
+	noteProperties, ok, err := getObjectField(fields, constants.RequestKeyNoteProperties)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("noteProperties is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyNoteProperties)
 	}
-	blockValues, ok, err := getArrayField(fields, "blocks")
+	blockValues, ok, err := getArrayField(fields, constants.RequestKeyBlocks)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.New("blocks is required")
+		return fmt.Errorf("%s is required", constants.RequestKeyBlocks)
 	}
 	blocks := make([]BlockModel, 0, len(blockValues))
 	blockIDs := make(map[uuid.UUID]struct{}, len(blockValues))
@@ -439,14 +439,14 @@ func (m *NoteModel) FromRequest(op ClientOperation, ownerID uuid.UUID) error {
 	for i, rawBlock := range blockValues {
 		var block BlockModel
 		if err := block.FromRequest(rawBlock); err != nil {
-			return fmt.Errorf("blocks[%d]: %w", i, err)
+			return fmt.Errorf("%s[%d]: %w", constants.RequestKeyBlocks, i, err)
 		}
 		position := block.Position
 		if _, exists := blockIDs[block.ID]; exists {
-			return errors.New("blocks contains duplicate ids")
+			return fmt.Errorf("%s contains duplicate ids", constants.RequestKeyBlocks)
 		}
 		if _, exists := positions[position]; exists {
-			return errors.New("blocks contains duplicate positions")
+			return fmt.Errorf("%s contains duplicate positions", constants.RequestKeyBlocks)
 		}
 		blockIDs[block.ID] = struct{}{}
 		positions[position] = struct{}{}

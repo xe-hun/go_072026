@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	constants "notes-server/internal"
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
 )
@@ -21,20 +22,20 @@ func (h *Handler) PullHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query()
-	protocolVersion, err := strconv.Atoi(query.Get("protocolVersion"))
+	protocolVersion, err := strconv.Atoi(query.Get(constants.RequestKeyProtocolVersion))
 	if err != nil {
-		httpapi.WriteError(w, r, httpapi.InvalidRequest("protocolVersion must be an integer."))
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyProtocolVersion+" must be an integer."))
 		return
 	}
-	deviceID := query.Get("deviceId")
-	cursor, err := strconv.ParseInt(query.Get("cursor"), 10, 64)
+	deviceID := query.Get(constants.RequestKeyDeviceID)
+	cursor, err := strconv.ParseInt(query.Get(constants.RequestKeyCursor), 10, 64)
 	if err != nil {
-		httpapi.WriteError(w, r, httpapi.InvalidRequest("cursor must be an integer."))
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyCursor+" must be an integer."))
 		return
 	}
 	resp, err := h.service.Pull(r.Context(), ownerID, PullRequest{
 		ProtocolVersion: protocolVersion,
-		ClientVersion:   query.Get("clientVersion"),
+		ClientVersion:   query.Get(constants.RequestKeyClientVersion),
 		DeviceID:        deviceID,
 		Cursor:          cursor,
 	})

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	constants "notes-server/internal"
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
 )
@@ -25,7 +26,7 @@ func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Post("/", h.register)
 	r.Get("/", h.list)
-	r.Delete("/{deviceId}", h.revoke)
+	r.Delete("/{"+constants.RequestKeyDeviceID+"}", h.revoke)
 	return r
 }
 
@@ -71,7 +72,7 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Unauthorized())
 		return
 	}
-	deviceID := chi.URLParam(r, "deviceId")
+	deviceID := chi.URLParam(r, constants.RequestKeyDeviceID)
 	if err := h.service.Revoke(r.Context(), ownerID, deviceID); err != nil {
 		httpapi.WriteError(w, r, err)
 		return

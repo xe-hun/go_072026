@@ -31,10 +31,10 @@ type Device struct {
 // request-level defaults and validation.
 func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 	if req.DeviceID == "" {
-		return httpapi.InvalidRequest("deviceId is required.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
 	}
 	if !constants.ValidDeviceID(req.DeviceID) {
-		return httpapi.InvalidRequest("deviceId must be 30 characters or fewer.")
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 
 	protocolVersion := req.ProtocolVersion
