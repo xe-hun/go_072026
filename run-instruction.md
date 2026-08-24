@@ -193,6 +193,33 @@ curl -X POST http://localhost:8080/v1/devices \
 Save the returned device `id`. It must be a client-supplied string of at most
 30 characters and is required by `/v1/sync`.
 
+## 8.1 Connect to Realtime Notifications
+
+Open a WebSocket using the same authenticated user and a registered device:
+
+```text
+ws://localhost:8080/v1/realtime?deviceId=<DEVICE_ID>
+Authorization: Bearer <JWT>
+```
+
+Use `wss://` behind TLS. The server validates the bearer token and confirms
+that the device belongs to that user and has not been revoked before
+upgrading the connection.
+
+The server sends availability hints such as:
+
+```json
+{
+  "type": "sync_available",
+  "latestCursor": 8425
+}
+```
+
+Compare `latestCursor` with the locally saved cursor. If it is higher, call
+the normal `/v1/sync` endpoint. Never advance the locally saved cursor from a
+WebSocket message; only a successful sync response can do that. The message
+does not contain note contents or change records.
+
 ## 9. Send an Empty Sync Request
 
 ```sh
@@ -296,6 +323,12 @@ Run unit tests:
 
 ```sh
 make test
+```
+
+Run the race detector, including realtime hub concurrency checks:
+
+```sh
+go test -race ./...
 ```
 
 Run vet:

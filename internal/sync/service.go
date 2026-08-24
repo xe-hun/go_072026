@@ -15,6 +15,7 @@ import (
 	constants "notes-server/internal"
 	"notes-server/internal/config"
 	"notes-server/internal/httpapi"
+	"notes-server/internal/realtime"
 	"notes-server/internal/store"
 )
 
@@ -37,10 +38,12 @@ type Service struct {
 	snapshotChangeThreshold int64
 	// snapshotByteThreshold controls snapshot job enqueueing by payload bytes.
 	snapshotByteThreshold int64
+	// eventBus publishes only after a successful sync transaction commits.
+	eventBus realtime.EventBus
 }
 
 // NewService builds a sync service using validated runtime limits.
-func NewService(store *store.Store, cfg config.Config, logger *slog.Logger) *Service {
+func NewService(store *store.Store, cfg config.Config, logger *slog.Logger, eventBus realtime.EventBus) *Service {
 	return &Service{
 		store:                   store,
 		logger:                  logger,
@@ -49,6 +52,7 @@ func NewService(store *store.Store, cfg config.Config, logger *slog.Logger) *Ser
 		maxPullLimit:            int32(cfg.SyncMaxPullLimit),
 		snapshotChangeThreshold: cfg.SnapshotChangeThreshold,
 		snapshotByteThreshold:   cfg.SnapshotByteThreshold,
+		eventBus:                eventBus,
 	}
 }
 
@@ -64,6 +68,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 		Accepted: []AcceptedDTO{},
 		Rejected: []RejectedDTO{},
 	}
+	var committedCursor int64
 
 	err := s.store.WithTx(ctx, func(tx *store.Store) error {
 		// Lock the device row so sync requests from the same device serialize.
@@ -97,6 +102,9 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 				resp.Rejected = append(resp.Rejected, *rejected)
 			} else if accepted != nil {
 				resp.Accepted = append(resp.Accepted, *accepted)
+				if accepted.globalSequence > committedCursor {
+					committedCursor = accepted.globalSequence
+				}
 			}
 			start = end
 		}
@@ -106,6 +114,7 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 	if err != nil {
 		return Response{}, err
 	}
+	s.publishCommittedSyncAvailable(ctx, ownerID, req.DeviceID, committedCursor)
 
 	s.logger.InfoContext(ctx, "sync completed",
 		"user_id", ownerID.String(),
@@ -114,6 +123,29 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 		"rejected", len(resp.Rejected),
 	)
 	return resp, nil
+}
+
+// publishCommittedSyncAvailable publishes a best-effort hint after WithTx has
+// returned successfully. Keeping this boundary in a separate helper makes the
+// ordering explicit: a broker failure is logged, but can never undo or change
+// the result of the already-committed sync transaction.
+func (s *Service) publishCommittedSyncAvailable(ctx context.Context, ownerID uuid.UUID, deviceID string, latestCursor int64) {
+	if latestCursor <= 0 || s.eventBus == nil {
+		return
+	}
+	event := realtime.SyncAvailableEvent{
+		UserID:         ownerID,
+		OriginDeviceID: deviceID,
+		LatestCursor:   latestCursor,
+	}
+	if err := s.eventBus.PublishSyncAvailable(ctx, event); err != nil {
+		s.logger.ErrorContext(ctx, "notification publish failed",
+			"user_id", ownerID,
+			"device_id", deviceID,
+			"latest_cursor", latestCursor,
+			"error", err,
+		)
+	}
 }
 
 // Pull returns remote changes after the supplied cursor for a device.
@@ -261,17 +293,22 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 
 	var failed RejectedDTO
 	changed := false
+	var latestCursor int64
 
 	err := tx.WithSavepoint(ctx, func(batchTx *store.Store) error {
 		for _, op := range operations {
+			var accepted *AcceptedDTO
 			var rejected *RejectedDTO
 			var operationChanged bool
 			var err error
-			state, _, rejected, operationChanged, err = s.applyOperation(ctx, batchTx, ownerID, deviceID, state, op)
+			state, accepted, rejected, operationChanged, err = s.applyOperation(ctx, batchTx, ownerID, deviceID, state, op)
 			if err != nil {
 				return err
 			}
 			changed = changed || operationChanged
+			if operationChanged && accepted != nil && accepted.globalSequence > latestCursor {
+				latestCursor = accepted.globalSequence
+			}
 
 			if rejected != nil {
 				failed = *rejected
@@ -318,6 +355,7 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 	accepted := AcceptedDTO{
 		NoteID:            operations[0].NoteID,
 		ServerNoteVersion: noteVersion,
+		globalSequence:    latestCursor,
 	}
 	return &accepted, nil, nil
 }
@@ -785,6 +823,7 @@ func acceptedFromChange(change store.NoteChange) AcceptedDTO {
 	return AcceptedDTO{
 		NoteID:            change.NoteID,
 		ServerNoteVersion: change.ResultingNoteVersion,
+		globalSequence:    change.GlobalSequence,
 	}
 }
 

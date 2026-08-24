@@ -11,6 +11,7 @@ Backend service for an offline-first mobile notes app. It implements JWT-authent
 - sqlc query definitions
 - golang-migrate migrations
 - Supabase-compatible JWT/JWKS validation
+- Gorilla WebSocket connections with PostgreSQL LISTEN/NOTIFY
 - Docker Compose for local PostgreSQL
 - `log/slog`
 
@@ -52,6 +53,7 @@ make dev-auth
 make dev-jwks
 make sqlc
 make test
+go test -race ./...
 make test-integration
 make lint
 make db-reset
@@ -81,6 +83,7 @@ VS Code debug configurations are included for the API and worker in `.vscode/lau
 - `POST /v1/sync`
 - `GET /v1/sync?protocolVersion=1&clientVersion=...&deviceId=...&cursor=...`
 - `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
+- `GET /v1/realtime?deviceId=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 
@@ -114,6 +117,33 @@ inside each operation's `changeData`. `create_category`, `modify_category`, and 
 not note columns. Current state updates and change-log inserts happen inside
 the same PostgreSQL transaction. Operation idempotency is enforced by
 `(device_id, client_operation_id)`.
+
+## Realtime Notifications
+
+An authenticated device may open `GET /v1/realtime?deviceId=<DEVICE_ID>`
+using the same bearer token as the sync API. The server validates that the
+device belongs to the authenticated user and is not revoked before upgrading
+the request.
+
+The WebSocket sends only small availability hints:
+
+```json
+{
+  "type": "sync_available",
+  "latestCursor": 8425
+}
+```
+
+The client must compare `latestCursor` with its locally saved cursor and then
+call the normal `/v1/sync` endpoint when newer data is available. A WebSocket
+message must never advance the saved cursor. Notifications are coalesced to
+the highest pending cursor, and the originating device is not notified.
+
+Each API instance keeps only its active sockets in memory. PostgreSQL
+LISTEN/NOTIFY distributes committed availability events between instances.
+Realtime delivery is best-effort and never changes sync transaction results;
+clients catch up through normal cursor-based sync after reconnects or missed
+notifications.
 
 ## Assumptions
 

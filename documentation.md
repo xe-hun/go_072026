@@ -52,6 +52,10 @@ Note and block models own entity-to-response conversion and entity validation.
 conversion/validation, idempotency, version conflict handling, current-state
 mutations, change-log writes, pull pagination, and snapshot job enqueueing.
 
+`internal/realtime` owns active local WebSocket connections and the
+PostgreSQL LISTEN/NOTIFY event bus. It stores only authenticated
+user/device-to-connection mappings and never performs note synchronization.
+
 `internal/store` is the persistence boundary. It wraps `pgxpool`, coordinates transactions, converts generated sqlc models into app-facing models, and exposes store methods used by services.
 
 `internal/jobs` contains the outbox worker and snapshot creation logic.
@@ -72,6 +76,7 @@ Application dependencies:
 - `github.com/golang-jwt/jwt/v5`: JWT parsing and claims validation
 - `github.com/google/uuid`: UUID generation and parsing
 - `github.com/jackc/pgx/v5`: PostgreSQL driver and connection pool
+- `github.com/gorilla/websocket`: WebSocket upgrade and frame handling
 
 Tooling dependencies:
 
@@ -104,10 +109,12 @@ The API server starts in `cmd/api/main.go`:
 1. Load and validate configuration.
 2. Open a PostgreSQL pool.
 3. Initialize JWKS-backed JWT verification.
-4. Build Chi routes.
-5. Attach middleware.
-6. Serve until interrupted.
-7. Shut down gracefully and close database connections.
+4. Create the local realtime hub and PostgreSQL LISTEN/NOTIFY event bus.
+5. Start the listener on a dedicated connection acquired from the shared pool.
+6. Build Chi routes and attach middleware.
+7. Serve until interrupted.
+8. Stop HTTP/WebSocket intake, cancel the listener, close active sockets, and
+   close database connections.
 
 Public routes:
 
@@ -121,6 +128,7 @@ Authenticated routes:
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
 - `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
+- `GET /v1/realtime?deviceId=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 
@@ -188,6 +196,50 @@ device ID to check the authenticated user's persisted device cursor without
 pulling change records. The response is `{ "updatesAvailable": true|false }`.
 
 A valid sync request can have both accepted and rejected note batches. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
+
+## Realtime Flow
+
+The authenticated `GET /v1/realtime?deviceId=...` handler validates the
+registered device with the shared store, upgrades the request, and registers
+the connection in the local hub. Each socket has a small bounded send queue,
+read/write deadlines, a ping/pong heartbeat, and a small incoming frame limit.
+Slow clients are disconnected; pending `sync_available` hints are coalesced to
+the highest cursor.
+
+After a sync transaction commits, the sync service publishes one event for the
+highest newly inserted `note_changes.global_sequence`:
+
+```json
+{
+  "userId": "uuid",
+  "originDeviceId": "phone",
+  "latestCursor": 8425
+}
+```
+
+The PostgreSQL event bus publishes with `pg_notify('sync_available', ...)`.
+Every API instance listens on a dedicated connection acquired from the shared
+`pgxpool`, validates incoming payloads, and forwards events only to local
+connections for the event's user. The originating device is skipped.
+
+The client-facing message is:
+
+```json
+{
+  "type": "sync_available",
+  "latestCursor": 8425
+}
+```
+
+This is only a hint. Clients must not advance their saved cursor from it;
+only a successful normal sync response may advance the cursor. Publishing is
+best-effort after commit, so a PostgreSQL notification failure cannot roll
+back or turn a completed sync write into an error.
+
+During API shutdown, HTTP shutdown stops new WebSocket upgrades, the listener
+context is canceled and its acquired connection is released, then the hub
+closes active sockets and waits for their read/write loops before the store is
+closed.
 
 ## Versioning
 

@@ -19,6 +19,7 @@ import (
 	"notes-server/internal/httpapi"
 	apimw "notes-server/internal/middleware"
 	"notes-server/internal/notes"
+	"notes-server/internal/realtime"
 	"notes-server/internal/store"
 	syncapi "notes-server/internal/sync"
 )
@@ -53,7 +54,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	router := buildRouter(cfg, logger, st, verifier)
+	hub := realtime.NewHub(logger)
+	eventBus := realtime.NewPostgresEventBus(st.Pool(), logger)
+	listenerCtx, cancelListener := context.WithCancel(context.Background())
+	listenerDone := make(chan struct{})
+	go func() {
+		defer close(listenerDone)
+		if err := eventBus.Subscribe(listenerCtx, hub.PublishSyncAvailable); err != nil {
+			logger.Error("postgres realtime listener stopped", "error", err)
+		}
+	}()
+
+	router := buildRouter(cfg, logger, st, verifier, hub, eventBus)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
@@ -74,15 +86,17 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
+	var serverErr error
 	select {
 	case sig := <-stop:
 		logger.Info("shutdown signal received", "signal", sig.String())
 	case err := <-errCh:
 		if !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("api server failed", "error", err)
-			os.Exit(1)
+			serverErr = err
 		}
 	}
+	signal.Stop(stop)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -90,20 +104,30 @@ func main() {
 	// short window to finish before the process exits.
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
+	}
+	// Shutdown stops new HTTP/WebSocket requests first. The listener and hub
+	// are then stopped explicitly because hijacked WebSocket connections are
+	// outside net/http.Server.Shutdown's normal request wait.
+	cancelListener()
+	<-listenerDone
+	hub.Close()
+	logger.Info("api stopped")
+	if serverErr != nil {
+		st.Close()
 		os.Exit(1)
 	}
-	logger.Info("api stopped")
 }
 
-func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier) http.Handler {
+func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier, hub *realtime.Hub, eventBus realtime.EventBus) http.Handler {
 	// Services contain business rules; handlers only decode/encode HTTP data.
 	// This mirrors the intended flow: handler -> service -> store/sqlc.
 	deviceService := devices.NewService(st)
 	deviceHandler := devices.NewHandler(deviceService)
 	noteService := notes.NewService(st)
 	noteHandler := notes.NewHandler(noteService)
-	syncService := syncapi.NewService(st, cfg, logger)
+	syncService := syncapi.NewService(st, cfg, logger, eventBus)
 	syncHandler := syncapi.NewHandler(syncService)
+	realtimeHandler := realtime.NewHandler(hub, st, logger)
 
 	r := chi.NewRouter()
 	// Global middleware applies to both public and authenticated routes. Request
@@ -143,6 +167,7 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 		r.Post("/sync", syncHandler.ServeHTTP)
 		r.Get("/sync/updates-available", syncHandler.UpdatesAvailableHTTP)
 		r.Get("/sync", syncHandler.PullHTTP)
+		r.Get("/realtime", realtimeHandler.ServeHTTP)
 		r.Mount("/notes", noteHandler.Routes())
 	})
 	return r

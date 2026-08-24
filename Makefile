@@ -8,7 +8,7 @@ DEV_JWT_SUBJECT ?=
 DEV_JWT_DAYS ?= 365
 DEV_JWKS_ADDR ?= :8081
 
-.PHONY: db-up db-down db-reset migrate-up migrate-down migrate-version migrate-force dev-auth dev-jwks dev-auth-verify sqlc run-api run-worker test test-integration lint tidy
+.PHONY: db-up db-down db-reset migrate-up migrate-down migrate-version migrate-force dev-auth dev-jwks dev-auth-verify sqlc run-api run-worker test test-race test-integration lint tidy
 
 db-up:
 	docker compose up -d 
@@ -57,6 +57,9 @@ run-worker:
 
 test:
 	go test ./...
+
+test-race:
+	go test -race ./...
 
 test-integration:
 	go test -tags=integration ./tests/integration/...

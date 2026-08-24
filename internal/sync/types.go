@@ -83,6 +83,9 @@ type UpdatesAvailableResponse struct {
 type AcceptedDTO struct {
 	NoteID            uuid.UUID `json:"noteId"`
 	ServerNoteVersion int64     `json:"serverNoteVersion"`
+	// globalSequence is internal transaction metadata used to publish the
+	// post-commit realtime hint; it is deliberately not part of the HTTP DTO.
+	globalSequence int64
 }
 
 // RejectedDTO reports why one note batch in an otherwise valid sync request

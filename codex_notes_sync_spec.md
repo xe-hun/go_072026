@@ -684,6 +684,7 @@ POST /v1/devices
 DELETE /v1/devices/{deviceId}
 GET /v1/devices
 GET /v1/sync/updates-available?protocolVersion=1&deviceId=...
+GET /v1/realtime?deviceId=...
 ```
 
 ---
@@ -700,6 +701,7 @@ GET    /v1/devices
 DELETE /v1/devices/{deviceId}
 POST   /v1/sync
 GET    /v1/sync/updates-available?protocolVersion=1&deviceId=...
+GET    /v1/realtime?deviceId=...
 GET    /v1/notes/{noteId}
 GET    /v1/notes/{noteId}/snapshot
 ```
@@ -707,6 +709,36 @@ GET    /v1/notes/{noteId}/snapshot
 The sync endpoint is the main write path.
 
 Direct note endpoints are primarily for recovery, debugging, or full resync.
+
+### 13.1 Realtime availability notifications
+
+`GET /v1/realtime?deviceId=...` is authenticated by the existing bearer-token
+middleware and accepts only a registered, non-revoked device owned by the
+authenticated user. The server upgrades the request to WebSocket and sends
+small hints, never note data:
+
+```json
+{
+  "type": "sync_available",
+  "latestCursor": 8425
+}
+```
+
+The client compares `latestCursor` with its locally saved account cursor and
+calls normal `/v1/sync` when it is higher. A WebSocket hint never advances the
+client cursor.
+
+After a sync transaction commits, the API publishes one event for the highest
+newly committed `note_changes.global_sequence`. PostgreSQL LISTEN/NOTIFY
+distributes the event to every API instance. Each instance keeps only its
+active user/device connections in a bounded in-memory hub, excludes the
+originating device, and coalesces pending hints to the highest cursor. A
+notification failure is logged and does not affect an already committed sync.
+
+The listener uses one connection acquired from the existing `pgxpool`,
+reconnects with bounded exponential backoff, ignores malformed events, and
+releases the connection during shutdown. WebSocket read/write loops have
+deadlines, ping/pong heartbeats, and a small incoming frame limit.
 
 ---
 
@@ -992,6 +1024,12 @@ Test service logic for:
 - Invalid device ownership
 - Soft deletion
 - Snapshot threshold calculation
+- Realtime user/device registration and removal
+- Realtime fan-out only to the matching user
+- Origin-device exclusion
+- High-frequency cursor coalescing
+- Slow-client bounded-queue disconnection
+- Malformed notification rejection
 
 ### 21.2 PostgreSQL Integration Tests
 
@@ -1008,6 +1046,7 @@ Test:
 - Owner-scoped queries
 - Tombstone retrieval
 - Snapshot insertion and checksum
+- PostgreSQL LISTEN/NOTIFY delivery between API instances
 
 ### 21.3 API Tests
 
@@ -1024,6 +1063,7 @@ Test:
 - Combined push and pull
 - Partial batch conflicts
 - Revoked device
+- Authenticated WebSocket upgrade and invalid-device rejection
 - Cursor expired response
 
 ### 21.4 Critical Sync Scenarios
@@ -1066,7 +1106,9 @@ Provide graceful shutdown:
 
 1. Stop accepting new requests.
 2. Allow active requests to finish within a timeout.
-3. Close database connections.
+3. Cancel the PostgreSQL realtime listener.
+4. Close active WebSocket connections and wait for their loops.
+5. Close database connections.
 
 Provide `/health` for process health and `/ready` for database readiness.
 
@@ -1076,7 +1118,7 @@ Provide `/health` for process health and `/ready` for database readiness.
 
 Do not implement in the first version:
 
-- Real-time WebSocket collaboration
+- Full real-time WebSocket collaboration
 - Multi-user shared-note editing
 - CRDTs
 - Operational transformation
