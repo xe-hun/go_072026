@@ -18,7 +18,15 @@
       "program": "${workspaceFolder}/cmd/worker",
       "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Run Notes WebSocket",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/websocket",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }
-

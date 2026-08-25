@@ -15,7 +15,8 @@ import (
 
 const syncAvailableMessageType = "sync_available"
 
-// SyncAvailableEvent is the small event exchanged between API instances.
+// SyncAvailableEvent is the small event exchanged between sync API and
+// WebSocket server instances.
 //
 // Device IDs are strings in this project because they are client-supplied
 // identifiers in sync_devices. The event carries no note data or operation

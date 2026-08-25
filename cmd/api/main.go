@@ -54,18 +54,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	hub := realtime.NewHub(logger)
 	eventBus := realtime.NewPostgresEventBus(st.Pool(), logger)
-	listenerCtx, cancelListener := context.WithCancel(context.Background())
-	listenerDone := make(chan struct{})
-	go func() {
-		defer close(listenerDone)
-		if err := eventBus.Subscribe(listenerCtx, hub.PublishSyncAvailable); err != nil {
-			logger.Error("postgres realtime listener stopped", "error", err)
-		}
-	}()
 
-	router := buildRouter(cfg, logger, st, verifier, hub, eventBus)
+	router := buildRouter(cfg, logger, st, verifier, eventBus)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
@@ -105,12 +96,6 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
 	}
-	// Shutdown stops new HTTP/WebSocket requests first. The listener and hub
-	// are then stopped explicitly because hijacked WebSocket connections are
-	// outside net/http.Server.Shutdown's normal request wait.
-	cancelListener()
-	<-listenerDone
-	hub.Close()
 	logger.Info("api stopped")
 	if serverErr != nil {
 		st.Close()
@@ -118,7 +103,7 @@ func main() {
 	}
 }
 
-func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier, hub *realtime.Hub, eventBus realtime.EventBus) http.Handler {
+func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier, eventBus realtime.EventBus) http.Handler {
 	// Services contain business rules; handlers only decode/encode HTTP data.
 	// This mirrors the intended flow: handler -> service -> store/sqlc.
 	deviceService := devices.NewService(st)
@@ -127,8 +112,6 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	noteHandler := notes.NewHandler(noteService)
 	syncService := syncapi.NewService(st, cfg, logger, eventBus)
 	syncHandler := syncapi.NewHandler(syncService)
-	realtimeHandler := realtime.NewHandler(hub, st, logger)
-
 	r := chi.NewRouter()
 	// Global middleware applies to both public and authenticated routes. Request
 	// ID is first so later middleware and error responses can include it.
@@ -167,7 +150,6 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 		r.Post("/sync", syncHandler.ServeHTTP)
 		r.Get("/sync/updates-available", syncHandler.UpdatesAvailableHTTP)
 		r.Get("/sync", syncHandler.PullHTTP)
-		r.Get("/realtime", realtimeHandler.ServeHTTP)
 		r.Mount("/notes", noteHandler.Routes())
 	})
 	return r

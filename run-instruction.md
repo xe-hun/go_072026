@@ -164,6 +164,18 @@ make run-worker
 
 The worker claims `outbox_jobs` rows and currently handles snapshot creation jobs.
 
+## 7.1 Run the WebSocket Server
+
+Open another terminal and start the dedicated WebSocket server:
+
+```sh
+make run-websocket
+```
+
+It listens on `WEBSOCKET_PORT` (`8082` by default). It owns WebSocket
+connections and subscribes to PostgreSQL `LISTEN/NOTIFY`; the API publishes
+sync availability events after committed sync writes.
+
 ## 8. Register a Device
 
 All `/v1` routes require a JWT:
@@ -198,7 +210,7 @@ Save the returned device `id`. It must be a client-supplied string of at most
 Open a WebSocket using the same authenticated user and a registered device:
 
 ```text
-ws://localhost:8080/v1/realtime?deviceId=<DEVICE_ID>
+ws://localhost:8082/v1/realtime?deviceId=<DEVICE_ID>
 Authorization: Bearer <JWT>
 ```
 
@@ -337,10 +349,10 @@ Run vet:
 make lint
 ```
 
-Build API and worker:
+Build API, WebSocket server, and worker:
 
 ```sh
-go build ./cmd/api ./cmd/worker
+go build ./cmd/api ./cmd/websocket ./cmd/worker
 ```
 
 Run integration tests when a test database is available:

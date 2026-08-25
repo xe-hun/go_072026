@@ -730,12 +730,13 @@ client cursor.
 
 After a sync transaction commits, the API publishes one event for the highest
 newly committed `note_changes.global_sequence`. PostgreSQL LISTEN/NOTIFY
-distributes the event to every API instance. Each instance keeps only its
-active user/device connections in a bounded in-memory hub, excludes the
-originating device, and coalesces pending hints to the highest cursor. A
-notification failure is logged and does not affect an already committed sync.
+distributes the event to every WebSocket server instance. Each WebSocket
+server keeps only its active user/device connections in a bounded in-memory
+hub, excludes the originating device, and coalesces pending hints to the
+highest cursor. A notification failure is logged and does not affect an
+already committed sync.
 
-The listener uses one connection acquired from the existing `pgxpool`,
+The WebSocket server listener uses one connection acquired from its `pgxpool`,
 reconnects with bounded exponential backoff, ignores malformed events, and
 releases the connection during shutdown. WebSocket read/write loops have
 deadlines, ping/pong heartbeats, and a small incoming frame limit.
@@ -1046,7 +1047,7 @@ Test:
 - Owner-scoped queries
 - Tombstone retrieval
 - Snapshot insertion and checksum
-- PostgreSQL LISTEN/NOTIFY delivery between API instances
+- PostgreSQL LISTEN/NOTIFY delivery between API and WebSocket server instances
 
 ### 21.3 API Tests
 
@@ -1102,12 +1103,13 @@ Concurrency for the same note must be controlled through PostgreSQL row locks or
 
 Use a small database pool per instance.
 
-Provide graceful shutdown:
+Provide graceful shutdown for each process:
 
 1. Stop accepting new requests.
 2. Allow active requests to finish within a timeout.
-3. Cancel the PostgreSQL realtime listener.
-4. Close active WebSocket connections and wait for their loops.
+3. In the WebSocket process, cancel the PostgreSQL realtime listener.
+4. In the WebSocket process, close active WebSocket connections and wait for
+   their loops.
 5. Close database connections.
 
 Provide `/health` for process health and `/ready` for database readiness.

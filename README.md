@@ -43,6 +43,15 @@ make run-api
 make run-worker
 ```
 
+7. Run the WebSocket server in a third terminal:
+
+```sh
+make run-websocket
+```
+
+The API listens on port `8080` and the WebSocket server listens on
+`WEBSOCKET_PORT` (`8082` by default).
+
 ## Development
 
 Useful commands:
@@ -71,7 +80,8 @@ one-year JWT and JWKS with `make dev-auth`, run the JWKS endpoint with
 token in `.dev/auth/token.txt` as `Authorization: Bearer <token>`. The generated
 files are ignored by git and must not be used for live user authentication.
 
-VS Code debug configurations are included for the API and worker in `.vscode/launch.json`.
+VS Code debug configurations are included for the API, WebSocket server, and
+worker in `.vscode/launch.json`.
 
 ## Endpoints
 
@@ -83,7 +93,7 @@ VS Code debug configurations are included for the API and worker in `.vscode/lau
 - `POST /v1/sync`
 - `GET /v1/sync?protocolVersion=1&clientVersion=...&deviceId=...&cursor=...`
 - `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
-- `GET /v1/realtime?deviceId=...`
+- `GET /v1/realtime?deviceId=...` (WebSocket server, port `8082` by default)
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 
@@ -139,11 +149,11 @@ call the normal `/v1/sync` endpoint when newer data is available. A WebSocket
 message must never advance the saved cursor. Notifications are coalesced to
 the highest pending cursor, and the originating device is not notified.
 
-Each API instance keeps only its active sockets in memory. PostgreSQL
-LISTEN/NOTIFY distributes committed availability events between instances.
-Realtime delivery is best-effort and never changes sync transaction results;
-clients catch up through normal cursor-based sync after reconnects or missed
-notifications.
+Each WebSocket server instance keeps only its active sockets in memory.
+PostgreSQL LISTEN/NOTIFY distributes committed availability events from the API
+to the WebSocket process. Realtime delivery is best-effort and never changes
+sync transaction results; clients catch up through normal cursor-based sync
+after reconnects or missed notifications.
 
 ## Assumptions
 

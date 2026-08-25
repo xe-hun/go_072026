@@ -10,7 +10,8 @@ import (
 	"time"
 )
 
-// Config is the immutable runtime configuration used by both the API and worker.
+// Config is the immutable runtime configuration used by the API, WebSocket,
+// and worker processes.
 // Values are read once at startup so the rest of the code can depend on a stable,
 // validated configuration object.
 type Config struct {
@@ -18,6 +19,8 @@ type Config struct {
 	AppEnv string
 	// Port is the HTTP port used by the API process.
 	Port string
+	// WebSocketPort is the HTTP port used by the WebSocket process.
+	WebSocketPort string
 	// LogLevel controls slog verbosity.
 	LogLevel string
 
@@ -64,6 +67,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		AppEnv:                      get("APP_ENV", "development"),
 		Port:                        get("PORT", "8080"),
+		WebSocketPort:               get("WEBSOCKET_PORT", "8082"),
 		LogLevel:                    get("LOG_LEVEL", "info"),
 		DatabaseURL:                 os.Getenv("DATABASE_URL"),
 		JWTIssuer:                   os.Getenv("JWT_ISSUER"),

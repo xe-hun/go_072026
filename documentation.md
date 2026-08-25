@@ -23,6 +23,10 @@ The API process is stateless. Durable state lives in PostgreSQL. Multiple API in
 
 `cmd/api` starts the HTTP server. It loads configuration, opens `pgxpool`, initializes JWT verification, builds routes, and performs graceful shutdown.
 
+`cmd/websocket` starts the dedicated WebSocket server. It loads configuration,
+opens its own `pgxpool` for connection-time device validation, subscribes to
+PostgreSQL `LISTEN/NOTIFY`, and owns the in-memory connection hub.
+
 `cmd/worker` starts the background worker. It loads configuration, opens `pgxpool`, claims jobs from `outbox_jobs`, and currently creates note snapshots.
 
 `internal/config` loads `.env` and environment variables. It validates required settings at startup so configuration errors fail fast.
@@ -53,8 +57,9 @@ conversion/validation, idempotency, version conflict handling, current-state
 mutations, change-log writes, pull pagination, and snapshot job enqueueing.
 
 `internal/realtime` owns active local WebSocket connections and the
-PostgreSQL LISTEN/NOTIFY event bus. It stores only authenticated
-user/device-to-connection mappings and never performs note synchronization.
+PostgreSQL LISTEN/NOTIFY event bus. The WebSocket process stores only
+authenticated user/device-to-connection mappings and never performs note
+synchronization.
 
 `internal/store` is the persistence boundary. It wraps `pgxpool`, coordinates transactions, converts generated sqlc models into app-facing models, and exposes store methods used by services.
 
@@ -109,12 +114,10 @@ The API server starts in `cmd/api/main.go`:
 1. Load and validate configuration.
 2. Open a PostgreSQL pool.
 3. Initialize JWKS-backed JWT verification.
-4. Create the local realtime hub and PostgreSQL LISTEN/NOTIFY event bus.
-5. Start the listener on a dedicated connection acquired from the shared pool.
-6. Build Chi routes and attach middleware.
-7. Serve until interrupted.
-8. Stop HTTP/WebSocket intake, cancel the listener, close active sockets, and
-   close database connections.
+4. Create the PostgreSQL event bus used to publish committed sync hints.
+5. Build Chi routes and attach middleware.
+6. Serve until interrupted.
+7. Stop HTTP intake and close database connections.
 
 Public routes:
 
@@ -128,9 +131,14 @@ Authenticated routes:
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
 - `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
-- `GET /v1/realtime?deviceId=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
+
+The WebSocket server exposes:
+
+- `GET /health`
+- `GET /ready`
+- `GET /v1/realtime?deviceId=...`
 
 ## Authentication Flow
 
@@ -206,7 +214,8 @@ read/write deadlines, a ping/pong heartbeat, and a small incoming frame limit.
 Slow clients are disconnected; pending `sync_available` hints are coalesced to
 the highest cursor.
 
-After a sync transaction commits, the sync service publishes one event for the
+The WebSocket process starts its PostgreSQL listener on a dedicated connection
+and forwards events to its local hub. After a sync transaction commits, the sync service publishes one event for the
 highest newly inserted `note_changes.global_sequence`:
 
 ```json
@@ -218,8 +227,8 @@ highest newly inserted `note_changes.global_sequence`:
 ```
 
 The PostgreSQL event bus publishes with `pg_notify('sync_available', ...)`.
-Every API instance listens on a dedicated connection acquired from the shared
-`pgxpool`, validates incoming payloads, and forwards events only to local
+Every WebSocket server instance listens on a dedicated connection acquired from
+its `pgxpool`, validates incoming payloads, and forwards events only to local
 connections for the event's user. The originating device is skipped.
 
 The client-facing message is:
@@ -236,10 +245,10 @@ only a successful normal sync response may advance the cursor. Publishing is
 best-effort after commit, so a PostgreSQL notification failure cannot roll
 back or turn a completed sync write into an error.
 
-During API shutdown, HTTP shutdown stops new WebSocket upgrades, the listener
-context is canceled and its acquired connection is released, then the hub
-closes active sockets and waits for their read/write loops before the store is
-closed.
+During WebSocket server shutdown, HTTP shutdown stops new upgrades, the
+listener context is canceled and its acquired connection is released, then the
+hub closes active sockets and waits for their read/write loops before the store
+is closed.
 
 ## Versioning
 

@@ -10,7 +10,7 @@ import (
 
 var errHubClosed = errors.New("realtime hub is closed")
 
-// Hub owns only active WebSocket connections on one API instance. The mutex
+// Hub owns only active WebSocket connections on one WebSocket server instance. The mutex
 // keeps registration, replacement, removal, and notification fan-out simple
 // and makes the hot path a short map lookup plus bounded channel sends.
 type Hub struct {
