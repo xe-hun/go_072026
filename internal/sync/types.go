@@ -103,7 +103,7 @@ type RejectedDTO struct {
 // NoteSnapshot contains the current note and block state returned once for a
 // rejected note batch so clients can resolve the conflict.
 type NoteSnapshot struct {
-	ID             uuid.UUID       `json:"id"`
+	NoteID         uuid.UUID       `json:"noteId"`
 	OwnerID        uuid.UUID       `json:"ownerId"`
 	Title          string          `json:"title"`
 	NoteProperties json.RawMessage `json:"noteProperties"`
@@ -116,8 +116,8 @@ type NoteSnapshot struct {
 
 // BlockSnapshot is one block inside a current note snapshot.
 type BlockSnapshot struct {
-	ID              uuid.UUID       `json:"id"`
-	NoteID          uuid.UUID       `json:"noteId"`
+	BlockId uuid.UUID `json:"blockId"`
+	// NoteID          uuid.UUID       `json:"noteId"`
 	BlockType       string          `json:"blockType"`
 	TextContent     string          `json:"textContent"`
 	Position        string          `json:"position"`
@@ -129,7 +129,7 @@ type BlockSnapshot struct {
 
 // PulledChange is a change-log row sent to another device during pull sync.
 type PulledChange struct {
-	ID                   uuid.UUID       `json:"id"`
+	// ID                   uuid.UUID       `json:"id"`
 	NoteID               uuid.UUID       `json:"noteId"`
 	DeviceID             string          `json:"deviceId"`
 	OperationType        string          `json:"operationType"`

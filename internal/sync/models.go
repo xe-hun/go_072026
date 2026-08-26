@@ -166,16 +166,16 @@ type BlockMutation struct {
 
 // FromRequest parses and validates a block mutation payload.
 func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) error {
-	fields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
+	changeDataFields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, constants.RequestKeyID)
+	id, ok, err := getUUIDField(changeDataFields, constants.RequestKeyBlockId)
 	if err != nil {
 		return err
 	}
 	if !ok || id == uuid.Nil {
-		return fmt.Errorf("%s is required", constants.RequestKeyID)
+		return fmt.Errorf("%s is required", constants.RequestKeyBlockId)
 	}
 	m.ID = id
 	if operationType == OperationDeleteBlock {
@@ -184,9 +184,9 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 	if operationType != OperationModifyBlock {
 		return errors.New("unsupported block mutation")
 	}
-	propertiesRaw, hasProperties := fields[constants.RequestKeyChangedProperties]
+	propertiesRaw, hasProperties := changeDataFields[constants.RequestKeyChangedProperties]
 	if hasProperties && !isJSONNull(propertiesRaw) {
-		propertiesRaw, _, err = getObjectField(fields, constants.RequestKeyChangedProperties)
+		propertiesRaw, _, err = getObjectField(changeDataFields, constants.RequestKeyChangedProperties)
 		if err != nil {
 			return err
 		}
@@ -195,7 +195,7 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 			return err
 		}
 	}
-	textDelta, hasTextDelta, err := getObjectField(fields, constants.RequestKeyTextDelta)
+	textDelta, hasTextDelta, err := getObjectField(changeDataFields, constants.RequestKeyTextDelta)
 	if err != nil {
 		return err
 	}
@@ -225,12 +225,12 @@ func (m *Category) FromRequest(raw json.RawMessage, requireName bool) error {
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, constants.RequestKeyID)
+	id, ok, err := getUUIDField(fields, constants.RequestKeyCategoryId)
 	if err != nil {
 		return err
 	}
 	if !ok || id == uuid.Nil {
-		return fmt.Errorf("%s is required", constants.RequestKeyID)
+		return fmt.Errorf("%s is required", constants.RequestKeyCategoryId)
 	}
 	m.ID = id
 	if !requireName {
@@ -292,7 +292,7 @@ func (op ClientOperation) Entity(ownerID uuid.UUID, deviceID string, blockID *uu
 // BlockModel is the typed block payload model used by block operations and
 // create_note.
 type BlockModel struct {
-	ID              uuid.UUID
+	BlockId         uuid.UUID
 	BlockType       string
 	Position        string
 	TextContent     string
@@ -317,18 +317,18 @@ func (m *BlockModel) FromCreateOperation(raw json.RawMessage) error {
 
 // FromRequest parses and validates a direct block payload.
 func (m *BlockModel) FromRequest(raw json.RawMessage) error {
-	fields, err := decodeObjectFields(raw, constants.RequestKeyBlock)
+	blockSnapShotFields, err := decodeObjectFields(raw, constants.RequestKeyBlock)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, constants.RequestKeyID)
+	blockId, ok, err := getUUIDField(blockSnapShotFields, constants.RequestKeyBlockId)
 	if err != nil {
 		return err
 	}
-	if !ok || id == uuid.Nil {
-		return fmt.Errorf("%s is required", constants.RequestKeyID)
+	if !ok || blockId == uuid.Nil {
+		return fmt.Errorf("%s is required", constants.RequestKeyBlockId)
 	}
-	blockType, ok, err := getStringField(fields, constants.RequestKeyBlockType)
+	blockType, ok, err := getStringField(blockSnapShotFields, constants.RequestKeyBlockType)
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func (m *BlockModel) FromRequest(raw json.RawMessage) error {
 	if err := validateBlockType(blockType); err != nil {
 		return err
 	}
-	position, ok, err := getFloatField(fields, constants.RequestKeyPosition)
+	position, ok, err := getFloatField(blockSnapShotFields, constants.RequestKeyPosition)
 	if err != nil {
 		return err
 	}
@@ -348,21 +348,21 @@ func (m *BlockModel) FromRequest(raw json.RawMessage) error {
 	if position < 0 {
 		return fmt.Errorf("%s must be greater than or equal to zero", constants.RequestKeyPosition)
 	}
-	textContent, ok, err := getStringField(fields, constants.RequestKeyTextContent)
+	textContent, ok, err := getStringField(blockSnapShotFields, constants.RequestKeyTextContent)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("%s is required", constants.RequestKeyTextContent)
 	}
-	blockProperties, ok, err := getObjectField(fields, constants.RequestKeyBlockProperties)
+	blockProperties, ok, err := getObjectField(blockSnapShotFields, constants.RequestKeyBlockProperties)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		blockProperties = json.RawMessage(`{}`)
 	}
-	m.ID = id
+	m.BlockId = blockId
 	m.BlockType = blockType
 	m.Position = strconv.FormatFloat(position, 'f', -1, 64)
 	m.TextContent = textContent
@@ -375,7 +375,7 @@ func (m *BlockModel) FromEntity(entity store.NoteBlock) error {
 	if entity.ID == uuid.Nil || entity.NoteID == uuid.Nil {
 		return errors.New("block entity must contain valid identifiers")
 	}
-	m.ID = entity.ID
+	m.BlockId = entity.ID
 	m.BlockType = entity.BlockType
 	m.Position = entity.Position
 	m.TextContent = entity.TextContent
@@ -385,7 +385,7 @@ func (m *BlockModel) FromEntity(entity store.NoteBlock) error {
 
 // Entity converts the block payload model into a persistence block entity.
 func (m BlockModel) Entity(noteID uuid.UUID) (store.NoteBlock, error) {
-	if noteID == uuid.Nil || m.ID == uuid.Nil {
+	if noteID == uuid.Nil || m.BlockId == uuid.Nil {
 		return store.NoteBlock{}, errors.New("block identifiers are required")
 	}
 	if err := validateBlockType(m.BlockType); err != nil {
@@ -395,7 +395,7 @@ func (m BlockModel) Entity(noteID uuid.UUID) (store.NoteBlock, error) {
 		return store.NoteBlock{}, fmt.Errorf("%s is required", constants.RequestKeyPosition)
 	}
 	return store.NoteBlock{
-		ID:              m.ID,
+		ID:              m.BlockId,
 		NoteID:          noteID,
 		BlockType:       m.BlockType,
 		TextContent:     m.TextContent,
@@ -456,13 +456,13 @@ func (m *NoteModel) FromRequest(op ClientOperation, ownerID uuid.UUID) error {
 			return fmt.Errorf("%s[%d]: %w", constants.RequestKeyBlocks, i, err)
 		}
 		position := block.Position
-		if _, exists := blockIDs[block.ID]; exists {
+		if _, exists := blockIDs[block.BlockId]; exists {
 			return fmt.Errorf("%s contains duplicate ids", constants.RequestKeyBlocks)
 		}
 		if _, exists := positions[position]; exists {
 			return fmt.Errorf("%s contains duplicate positions", constants.RequestKeyBlocks)
 		}
-		blockIDs[block.ID] = struct{}{}
+		blockIDs[block.BlockId] = struct{}{}
 		positions[position] = struct{}{}
 		blocks = append(blocks, block)
 	}
@@ -536,7 +536,6 @@ func (c *PulledChange) FromEntity(entity store.NoteChange) error {
 		return errors.New("change entity must contain valid identifiers")
 	}
 	*c = PulledChange{
-		ID:                   entity.ID,
 		NoteID:               entity.NoteID,
 		DeviceID:             entity.DeviceID,
 		OperationType:        entity.OperationType,
@@ -565,7 +564,7 @@ func (s *NoteSnapshot) FromEntity(entity store.NoteDocument) error {
 		blocks = append(blocks, block)
 	}
 	*s = NoteSnapshot{
-		ID:             entity.Note.ID,
+		NoteID:         entity.Note.ID,
 		OwnerID:        entity.Note.OwnerID,
 		Title:          entity.Note.Title,
 		NoteProperties: store.NormalizeJSON(entity.Note.NoteProperties),
@@ -584,8 +583,7 @@ func (s *BlockSnapshot) FromEntity(entity store.NoteBlock) error {
 		return errors.New("block entity must contain valid identifiers")
 	}
 	*s = BlockSnapshot{
-		ID:              entity.ID,
-		NoteID:          entity.NoteID,
+		BlockId:         entity.ID,
 		BlockType:       entity.BlockType,
 		TextContent:     entity.TextContent,
 		Position:        entity.Position,

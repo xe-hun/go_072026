@@ -122,7 +122,7 @@ func TestBlockModelFromCreateOperationUsesBlockField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if model.ID != blockID || model.TextContent != "hello" {
+	if model.BlockId != blockID || model.TextContent != "hello" {
 		t.Fatalf("unexpected block model: %+v", model)
 	}
 }

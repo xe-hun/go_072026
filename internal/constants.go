@@ -9,7 +9,9 @@ const (
 	DeviceIDMaxLength = 30
 
 	//commonkeys
-	RequestKeyID = "id"
+	// RequestKeyID         = "id"
+	RequestKeyBlockId    = "blockId"
+	RequestKeyCategoryId = "categoryId"
 
 	// Request field names. Keep these values together so request parsing,
 	// validation, and debugging use one canonical spelling.
