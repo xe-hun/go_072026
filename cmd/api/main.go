@@ -16,12 +16,15 @@ import (
 	"notes-server/internal/auth"
 	"notes-server/internal/config"
 	"notes-server/internal/devices"
+	devicehandlers "notes-server/internal/devices/handlers"
 	"notes-server/internal/httpapi"
 	apimw "notes-server/internal/middleware"
 	"notes-server/internal/notes"
+	notehandlers "notes-server/internal/notes/handlers"
 	"notes-server/internal/realtime"
 	"notes-server/internal/store"
 	syncapi "notes-server/internal/sync"
+	synchandlers "notes-server/internal/sync/handlers"
 )
 
 func main() {
@@ -107,11 +110,11 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	// Services contain business rules; handlers only decode/encode HTTP data.
 	// This mirrors the intended flow: handler -> service -> store/sqlc.
 	deviceService := devices.NewService(st)
-	deviceHandler := devices.NewHandler(deviceService)
+	deviceHandler := devicehandlers.New(deviceService)
 	noteService := notes.NewService(st)
-	noteHandler := notes.NewHandler(noteService)
+	noteHandler := notehandlers.New(noteService)
 	syncService := syncapi.NewService(st, cfg, logger, eventBus)
-	syncHandler := syncapi.NewHandler(syncService)
+	syncHandler := synchandlers.New(syncService)
 	r := chi.NewRouter()
 	// Global middleware applies to both public and authenticated routes. Request
 	// ID is first so later middleware and error responses can include it.
@@ -147,10 +150,10 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 		// writes auth.Claims to context for downstream handlers/services.
 		r.Use(auth.Middleware(verifier))
 		r.Mount("/devices", deviceHandler.Routes())
-		r.Post("/sync", syncHandler.ServeHTTP)
-		r.Post("/syncFullNote", syncHandler.SyncFullNoteHTTP)
-		r.Get("/sync/updates-available", syncHandler.UpdatesAvailableHTTP)
-		r.Get("/sync", syncHandler.PullHTTP)
+		r.Post("/sync", syncHandler.Push)
+		r.Post("/syncFullNote", syncHandler.FullNote)
+		r.Get("/sync/updates-available", syncHandler.UpdatesAvailable)
+		r.Get("/sync", syncHandler.Pull)
 		r.Mount("/notes", noteHandler.Routes())
 	})
 	return r
