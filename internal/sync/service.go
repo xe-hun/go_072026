@@ -125,6 +125,66 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 	return resp, nil
 }
 
+// SyncFullNote validates the requesting device and returns the current note
+// document as a rejection snapshot for each supplied note ID.
+func (s *Service) SyncFullNote(ctx context.Context, ownerID uuid.UUID, req FullNoteRequest) ([]RejectedDTO, error) {
+	if !constants.ValidDeviceID(req.DeviceID) {
+		return nil, httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required and must be 30 characters or fewer.")
+	}
+	if len(req.NoteIDs) == 0 {
+		return nil, httpapi.InvalidRequest("noteIds must contain at least one note ID.")
+	}
+	if len(req.NoteIDs) > s.maxOperations {
+		return nil, httpapi.NewError(http.StatusRequestEntityTooLarge, httpapi.CodePayloadTooLarge, "The full-note request contains too many note IDs.")
+	}
+	for _, noteID := range req.NoteIDs {
+		if noteID == uuid.Nil {
+			return nil, httpapi.InvalidRequest("noteIds must contain valid UUIDs.")
+		}
+	}
+
+	device, err := s.store.GetDeviceForOwner(ctx, req.DeviceID, ownerID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, httpapi.Forbidden("Device does not belong to the authenticated user.")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if device.RevokedAt.Valid {
+		return nil, httpapi.NewError(http.StatusForbidden, httpapi.CodeDeviceRevoked, "Device has been revoked.")
+	}
+
+	rejected := make([]RejectedDTO, 0, len(req.NoteIDs))
+	for _, noteID := range req.NoteIDs {
+		document, err := s.store.GetNoteDocument(ctx, noteID, ownerID)
+		if errors.Is(err, store.ErrNotFound) {
+			rejected = append(rejected, RejectedDTO{
+				Code:    httpapi.CodeNotFound,
+				Reason:  RejectionReasonNotFound,
+				Message: "Note not found.",
+				NoteID:  noteID,
+			})
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		var snapshot NoteSnapshot
+		if err := snapshot.FromEntity(document); err != nil {
+			return nil, err
+		}
+		rejected = append(rejected, RejectedDTO{
+			Code:              "CLIENT_REJECT_CHANGE",
+			Reason:            RejectionReasonClientRejectChange,
+			Message:           "The client rejected the server change.",
+			NoteID:            noteID,
+			NoteSnapshot:      &snapshot,
+			ServerNoteVersion: document.Note.CurrentVersion,
+		})
+	}
+	return rejected, nil
+}
+
 // publishCommittedSyncAvailable publishes a best-effort hint after WithTx has
 // returned successfully. Keeping this boundary in a separate helper makes the
 // ordering explicit: a broker failure is logged, but can never undo or change

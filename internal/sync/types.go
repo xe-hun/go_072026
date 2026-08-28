@@ -15,9 +15,10 @@ const ProtocolVersion = 1
 type RejectionReason string
 
 const (
-	RejectionReasonInvalidRequest  RejectionReason = "invalidRequest"
-	RejectionReasonNotFound        RejectionReason = "notFound"
-	RejectionReasonVersionConflict RejectionReason = "versionConflict"
+	RejectionReasonInvalidRequest     RejectionReason = "invalidRequest"
+	RejectionReasonNotFound           RejectionReason = "notFound"
+	RejectionReasonVersionConflict    RejectionReason = "versionConflict"
+	RejectionReasonClientRejectChange RejectionReason = "ClientRejectChange"
 )
 
 // Request is the JSON body accepted by POST /v1/sync.
@@ -30,6 +31,13 @@ type Request struct {
 	DeviceID string `json:"deviceId"`
 	// Operations are client-submitted writes to apply.
 	Operations []ClientOperation `json:"operations"`
+}
+
+// FullNoteRequest identifies the device and notes whose current server state
+// the client needs for full-note conflict resolution.
+type FullNoteRequest struct {
+	DeviceID string      `json:"deviceId"`
+	NoteIDs  []uuid.UUID `json:"noteIds"`
 }
 
 // PullRequest contains the query parameters accepted by GET /v1/sync.
