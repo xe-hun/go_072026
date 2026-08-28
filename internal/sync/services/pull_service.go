@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
 )
 
 // Pull returns remote changes after the supplied cursor for a device.

@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	constants "notes-server/internal"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
+	. "notes-server/internal/sync/operations"
 	"time"
 )
 
@@ -14,32 +16,32 @@ import (
 func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var blockModel BlockModel
 	if err := blockModel.FromCreateOperation(op.ChangeData); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	block, err := blockModel.Entity(op.NoteID)
 	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if err := state.ensureNote(ctx, tx, ownerID, op.NoteID); err != nil {
 		return nil, nil, err
 	}
 	if state.note == nil {
-		rejected := rejectedNotFound(op, "Note not found.")
+		rejected := RejectedNotFound(op, "Note not found.")
 		return nil, &rejected, nil
 	}
 	if state.note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, state.note.CurrentVersion)
+		rejected := RejectedConflict(op, state.note.CurrentVersion)
 		return nil, &rejected, nil
 	}
 	if _, exists := state.blocks[block.ID]; exists {
-		rejected := rejectedInvalid(op, "block already exists.")
+		rejected := RejectedInvalid(op, "block already exists.")
 		return nil, &rejected, nil
 	}
 	if err := tx.CreateBlock(ctx, block); err != nil {
 		if store.IsUniqueViolation(err) {
-			rejected := rejectedInvalid(op, "block already exists.")
+			rejected := RejectedInvalid(op, "block already exists.")
 			return nil, &rejected, nil
 		}
 		return nil, nil, err
@@ -52,7 +54,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID uuid
 func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationDeleteBlock); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	blockID := mutation.ID
@@ -70,7 +72,7 @@ func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	} else {
 		deleted, err := tx.DeleteBlock(ctx, blockID, op.NoteID)
 		if errors.Is(err, store.ErrNotFound) {
-			rejected := rejectedNotFound(op, "Block not found.")
+			rejected := RejectedNotFound(op, "Block not found.")
 			return nil, &rejected, nil
 		}
 		if err != nil {
@@ -84,7 +86,7 @@ func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid
 func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyBlock); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	blockID := mutation.ID
@@ -93,7 +95,7 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	}
 	block, err := state.ensureBlock(ctx, tx, op.NoteID, blockID)
 	if errors.Is(err, store.ErrNotFound) {
-		rejected := rejectedNotFound(op, "Block not found.")
+		rejected := RejectedNotFound(op, "Block not found.")
 		return nil, &rejected, nil
 	}
 	if err != nil {
@@ -102,7 +104,7 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	if mutation.HasProperties && len(mutation.ChangedProperties) > 0 {
 		blockProperties, err := mergeJSONProperties(block.BlockProperties, mutation.ChangedProperties, constants.RequestKeyBlockProperties)
 		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
+			rejected := RejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
 		block.BlockProperties = blockProperties
@@ -110,7 +112,7 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	if mutation.HasTextDelta {
 		text, err := applyTextDelta(block.TextContent, mutation.TextDelta)
 		if err != nil {
-			rejected := rejectedInvalid(op, err.Error())
+			rejected := RejectedInvalid(op, err.Error())
 			return nil, &rejected, nil
 		}
 		block.TextContent = text
@@ -142,7 +144,7 @@ func applyTextDelta(text string, delta TextDelta) (string, error) {
 }
 
 func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMessage, name string) (json.RawMessage, error) {
-	merged, err := decodeObjectFields(store.NormalizeJSON(current), name)
+	merged, err := DecodeObjectFields(store.NormalizeJSON(current), name)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-package syncapi
+package models
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"net/http"
 	constants "notes-server/internal"
 	"notes-server/internal/httpapi"
+	. "notes-server/internal/sync/operations"
 )
 
 // state.
@@ -80,7 +81,7 @@ func (op ClientOperation) Validate() error {
 	default:
 		return fmt.Errorf("%s is unsupported", constants.RequestKeyOperationType)
 	}
-	if normalizeChangeFormat(op.ChangeFormat) != ChangeFormatStructuredV1 {
+	if NormalizeChangeFormat(op.ChangeFormat) != ChangeFormatStructuredV1 {
 		return fmt.Errorf("%s is unsupported", constants.RequestKeyChangeFormat)
 	}
 	return nil

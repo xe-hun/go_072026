@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
 )
 
 // request-level failures return an HTTP error.
@@ -53,8 +54,8 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 				resp.Rejected = append(resp.Rejected, *rejected)
 			} else if accepted != nil {
 				resp.Accepted = append(resp.Accepted, *accepted)
-				if accepted.globalSequence > committedCursor {
-					committedCursor = accepted.globalSequence
+				if accepted.GlobalSequence > committedCursor {
+					committedCursor = accepted.GlobalSequence
 				}
 			}
 			start = end

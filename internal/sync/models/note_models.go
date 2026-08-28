@@ -1,4 +1,4 @@
-package syncapi
+package models
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	constants "notes-server/internal"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/operations"
 	"time"
 )
 
@@ -28,25 +29,25 @@ func (m *NoteModel) FromRequest(op ClientOperation, ownerID uuid.UUID) error {
 	if op.NoteID == uuid.Nil || ownerID == uuid.Nil {
 		return errors.New("note identifiers are required")
 	}
-	fields, err := decodeChangeObject(op.ChangeData)
+	fields, err := DecodeChangeObject(op.ChangeData)
 	if err != nil {
 		return err
 	}
-	title, ok, err := getStringField(fields, constants.RequestKeyTitle)
+	title, ok, err := GetStringField(fields, constants.RequestKeyTitle)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("%s is required", constants.RequestKeyTitle)
 	}
-	noteProperties, ok, err := getObjectField(fields, constants.RequestKeyNoteProperties)
+	noteProperties, ok, err := GetObjectField(fields, constants.RequestKeyNoteProperties)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("%s is required", constants.RequestKeyNoteProperties)
 	}
-	blockValues, ok, err := getArrayField(fields, constants.RequestKeyBlocks)
+	blockValues, ok, err := GetArrayField(fields, constants.RequestKeyBlocks)
 	if err != nil {
 		return err
 	}

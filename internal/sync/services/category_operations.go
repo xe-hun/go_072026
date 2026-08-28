@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"github.com/google/uuid"
 	constants "notes-server/internal"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
+	. "notes-server/internal/sync/operations"
 )
 
 // operation implementation.
@@ -26,7 +28,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID u
 
 	var operation Operation
 	if err := operation.FromRequest(op); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return state, nil, &rejected, false, nil
 	}
 	switch op.OperationType {
@@ -61,7 +63,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID u
 		accepted, rejected, err := s.modifyCategory(ctx, tx, ownerID, deviceID, op)
 		return state, accepted, rejected, rejected == nil, err
 	default:
-		rejected := rejectedInvalid(op, constants.RequestKeyOperationType+" is unsupported.")
+		rejected := RejectedInvalid(op, constants.RequestKeyOperationType+" is unsupported.")
 		return state, nil, &rejected, false, nil
 	}
 }
@@ -69,7 +71,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID u
 func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, true); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if err := tx.CreateCategory(ctx, category.ID, ownerID, category.Name); err != nil {
@@ -86,11 +88,11 @@ func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID u
 func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, false); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if err := tx.LockCategoryForOwner(ctx, category.ID, ownerID); errors.Is(err, store.ErrNotFound) {
-		rejected := rejectedNotFound(op, "Category not found.")
+		rejected := RejectedNotFound(op, "Category not found.")
 		return nil, &rejected, nil
 	} else if err != nil {
 		return nil, nil, err
@@ -109,12 +111,12 @@ func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID u
 func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, true); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	err := tx.LockCategoryForOwner(ctx, category.ID, ownerID)
 	if errors.Is(err, store.ErrNotFound) {
-		rejected := rejectedNotFound(op, "Category not found.")
+		rejected := RejectedNotFound(op, "Category not found.")
 		return nil, &rejected, nil
 	} else if err != nil {
 		return nil, nil, err

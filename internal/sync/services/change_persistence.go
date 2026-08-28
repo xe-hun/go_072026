@@ -1,9 +1,10 @@
-package syncapi
+package services
 
 import (
 	"context"
 	"github.com/google/uuid"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
 )
 
 // insertChange writes the append-only history row for an accepted operation.
@@ -43,7 +44,7 @@ func acceptedFromChange(change store.NoteChange) AcceptedDTO {
 	return AcceptedDTO{
 		NoteID:            change.NoteID,
 		ServerNoteVersion: change.ResultingNoteVersion,
-		globalSequence:    change.GlobalSequence,
+		GlobalSequence:    change.GlobalSequence,
 	}
 }
 

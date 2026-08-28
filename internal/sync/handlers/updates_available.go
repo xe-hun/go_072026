@@ -7,7 +7,7 @@ import (
 	constants "notes-server/internal"
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
-	syncapi "notes-server/internal/sync"
+	syncapi "notes-server/internal/sync/models"
 )
 
 // UpdatesAvailable handles GET /v1/sync/updates-available.

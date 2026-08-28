@@ -5,7 +5,7 @@ import (
 
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
-	syncapi "notes-server/internal/sync"
+	syncapi "notes-server/internal/sync/models"
 )
 
 // Push handles POST /v1/sync.

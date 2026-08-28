@@ -23,8 +23,8 @@ import (
 	notehandlers "notes-server/internal/notes/handlers"
 	"notes-server/internal/realtime"
 	"notes-server/internal/store"
-	syncapi "notes-server/internal/sync"
 	synchandlers "notes-server/internal/sync/handlers"
+	syncservices "notes-server/internal/sync/services"
 )
 
 func main() {
@@ -113,7 +113,7 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	deviceHandler := devicehandlers.New(deviceService)
 	noteService := notes.NewService(st)
 	noteHandler := notehandlers.New(noteService)
-	syncService := syncapi.NewService(st, cfg, logger, eventBus)
+	syncService := syncservices.NewService(st, cfg, logger, eventBus)
 	syncHandler := synchandlers.New(syncService)
 	r := chi.NewRouter()
 	// Global middleware applies to both public and authenticated routes. Request

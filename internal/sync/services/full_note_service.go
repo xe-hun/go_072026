@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	constants "notes-server/internal"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
 )
 
 // snapshot for each supplied note ID.

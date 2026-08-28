@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"context"
@@ -6,32 +6,34 @@ import (
 	"github.com/google/uuid"
 	constants "notes-server/internal"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
+	. "notes-server/internal/sync/operations"
 )
 
 // results in note version 1.
 func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	if op.BaseNoteVersion != 0 {
-		rejected := rejectedConflict(op, 0)
+		rejected := RejectedConflict(op, 0)
 		return nil, &rejected, nil
 	}
 	if state.noteLoaded && state.note != nil {
-		rejected := rejectedConflict(op, state.note.CurrentVersion)
+		rejected := RejectedConflict(op, state.note.CurrentVersion)
 		return nil, &rejected, nil
 	}
 
 	var model NoteModel
 	if err := model.FromRequest(op, ownerID); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	document, err := model.Entity()
 	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if err := tx.CreateNote(ctx, document.Note); err != nil {
 		if store.IsUniqueViolation(err) {
-			rejected := rejectedConflict(op, 0)
+			rejected := RejectedConflict(op, 0)
 			return nil, &rejected, nil
 		}
 		return nil, nil, err
@@ -41,7 +43,7 @@ func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID uuid.
 	for _, block := range document.Blocks {
 		if err := tx.CreateBlock(ctx, block); err != nil {
 			if store.IsUniqueViolation(err) {
-				rejected := rejectedInvalid(op, "block already exists.")
+				rejected := RejectedInvalid(op, "block already exists.")
 				return nil, &rejected, nil
 			}
 			return nil, nil, err
@@ -61,11 +63,11 @@ func (s *Service) existingNote(ctx context.Context, tx *store.Store, ownerID uui
 		return nil, err
 	}
 	if state.note == nil {
-		rejected := rejectedNotFound(op, "Note not found.")
+		rejected := RejectedNotFound(op, "Note not found.")
 		return &rejected, nil
 	}
 	if state.note.CurrentVersion != op.BaseNoteVersion {
-		rejected := rejectedConflict(op, state.note.CurrentVersion)
+		rejected := RejectedConflict(op, state.note.CurrentVersion)
 		return &rejected, nil
 	}
 	return nil, nil
@@ -76,13 +78,13 @@ func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID uuid.
 	if errors.Is(err, store.ErrNotFound) {
 		current, lookupErr := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
 		if errors.Is(lookupErr, store.ErrNotFound) {
-			rejected := rejectedNotFound(op, "Note not found.")
+			rejected := RejectedNotFound(op, "Note not found.")
 			return nil, &rejected, nil
 		}
 		if lookupErr != nil {
 			return nil, nil, lookupErr
 		}
-		rejected := rejectedConflict(op, current.CurrentVersion)
+		rejected := RejectedConflict(op, current.CurrentVersion)
 		return nil, &rejected, nil
 	}
 	if err != nil {
@@ -103,7 +105,7 @@ func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID uuid.
 func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation NoteMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteProperty); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
@@ -111,7 +113,7 @@ func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, owner
 	}
 	noteProperties, err := mergeJSONProperties(state.note.NoteProperties, mutation.NoteProperties, constants.RequestKeyNoteProperties)
 	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	state.note.NoteProperties = noteProperties
@@ -121,7 +123,7 @@ func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, owner
 func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation NoteMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteTitle); err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
@@ -129,7 +131,7 @@ func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID 
 	}
 	title, err := applyTextDelta(state.note.Title, mutation.TextDelta)
 	if err != nil {
-		rejected := rejectedInvalid(op, err.Error())
+		rejected := RejectedInvalid(op, err.Error())
 		return nil, &rejected, nil
 	}
 	state.note.Title = title

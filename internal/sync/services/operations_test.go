@@ -1,7 +1,9 @@
-package syncapi
+package services
 
 import (
 	"encoding/json"
+	. "notes-server/internal/sync/models"
+	. "notes-server/internal/sync/operations"
 	"testing"
 
 	"github.com/google/uuid"
@@ -80,7 +82,7 @@ func TestSortedOperationsOrdersByNoteThenSequence(t *testing.T) {
 // direct object shape.
 func TestDecodeChangeObjectRejectsNonObject(t *testing.T) {
 	raw := json.RawMessage(`[]`)
-	if _, err := decodeChangeObject(raw); err == nil {
+	if _, err := DecodeChangeObject(raw); err == nil {
 		t.Fatal("expected non-object changeData to fail")
 	}
 }
@@ -88,7 +90,7 @@ func TestDecodeChangeObjectRejectsNonObject(t *testing.T) {
 // TestDecodeTextDeltaRequiresDirectShape verifies the text delta object
 // expected by modify_note_title and modify_block.
 func TestDecodeTextDeltaRequiresDirectShape(t *testing.T) {
-	delta, err := decodeTextDelta(json.RawMessage(`{"index":1,"deleteCount":0,"insertText":"e"}`), "changeData")
+	delta, err := DecodeTextDelta(json.RawMessage(`{"index":1,"deleteCount":0,"insertText":"e"}`), "changeData")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,11 +122,11 @@ func TestNextCursorIncludesPulledSequenceWhenPullIsExhausted(t *testing.T) {
 // TestValidateBlockType protects the initial block type allow-list.
 func TestValidateBlockType(t *testing.T) {
 	for _, blockType := range []string{"text", "bullet", "todo", "numbered_list", "attachment"} {
-		if err := validateBlockType(blockType); err != nil {
+		if err := ValidateBlockType(blockType); err != nil {
 			t.Fatalf("expected %q to be valid: %v", blockType, err)
 		}
 	}
-	if err := validateBlockType("spreadsheet"); err == nil {
+	if err := ValidateBlockType("spreadsheet"); err == nil {
 		t.Fatal("expected unknown block type to fail")
 	}
 }
@@ -150,12 +152,12 @@ func TestApplyTextDeltaReplace(t *testing.T) {
 
 // TestApplyTextDeltaUsesRuneIndexes avoids corrupting multibyte text.
 func TestApplyTextDeltaUsesRuneIndexes(t *testing.T) {
-	got, err := applyTextDelta("hllo", TextDelta{Index: 1, InsertText: "é"})
+	got, err := applyTextDelta("hllo", TextDelta{Index: 1, InsertText: "ÃƒÂ©"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "héllo" {
-		t.Fatalf("text = %q, want héllo", got)
+	if got != "hÃƒÂ©llo" {
+		t.Fatalf("text = %q, want hÃƒÂ©llo", got)
 	}
 }
 

@@ -1,4 +1,4 @@
-package syncapi
+package models
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	constants "notes-server/internal"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/operations"
 	"strings"
 )
 
@@ -26,20 +27,20 @@ type NoteMutation struct {
 
 // FromRequest parses and validates a note mutation payload.
 func (m *NoteMutation) FromRequest(raw json.RawMessage, operationType string) error {
-	fields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
+	fields, err := DecodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
 	switch operationType {
 	case OperationModifyNoteProperty:
-		propertiesRaw, ok, err := getObjectField(fields, constants.RequestKeyNoteProperties)
+		propertiesRaw, ok, err := GetObjectField(fields, constants.RequestKeyNoteProperties)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return fmt.Errorf("%s must include at least one property", OperationModifyNoteProperty)
 		}
-		properties, err := decodeObjectFields(propertiesRaw, constants.RequestKeyNoteProperties)
+		properties, err := DecodeObjectFields(propertiesRaw, constants.RequestKeyNoteProperties)
 		if err != nil {
 			return err
 		}
@@ -49,14 +50,14 @@ func (m *NoteMutation) FromRequest(raw json.RawMessage, operationType string) er
 		m.NoteProperties = properties
 		m.HasProperties = true
 	case OperationModifyNoteTitle:
-		textDelta, ok, err := getObjectField(fields, constants.RequestKeyTextDelta)
+		textDelta, ok, err := GetObjectField(fields, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return fmt.Errorf("%s requires %s", OperationModifyNoteTitle, constants.RequestKeyTextDelta)
 		}
-		m.TextDelta, err = decodeTextDelta(textDelta, constants.RequestKeyTextDelta)
+		m.TextDelta, err = DecodeTextDelta(textDelta, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
@@ -80,11 +81,11 @@ type BlockMutation struct {
 
 // FromRequest parses and validates a block mutation payload.
 func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) error {
-	changeDataFields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
+	changeDataFields, err := DecodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(changeDataFields, constants.RequestKeyBlockId)
+	id, ok, err := GetUUIDField(changeDataFields, constants.RequestKeyBlockId)
 	if err != nil {
 		return err
 	}
@@ -99,22 +100,22 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 		return errors.New("unsupported block mutation")
 	}
 	propertiesRaw, hasProperties := changeDataFields[constants.RequestKeyChangedProperties]
-	if hasProperties && !isJSONNull(propertiesRaw) {
-		propertiesRaw, _, err = getObjectField(changeDataFields, constants.RequestKeyChangedProperties)
+	if hasProperties && !IsJSONNull(propertiesRaw) {
+		propertiesRaw, _, err = GetObjectField(changeDataFields, constants.RequestKeyChangedProperties)
 		if err != nil {
 			return err
 		}
-		m.ChangedProperties, err = decodeObjectFields(propertiesRaw, constants.RequestKeyChangedProperties)
+		m.ChangedProperties, err = DecodeObjectFields(propertiesRaw, constants.RequestKeyChangedProperties)
 		if err != nil {
 			return err
 		}
 	}
-	textDelta, hasTextDelta, err := getObjectField(changeDataFields, constants.RequestKeyTextDelta)
+	textDelta, hasTextDelta, err := GetObjectField(changeDataFields, constants.RequestKeyTextDelta)
 	if err != nil {
 		return err
 	}
 	if hasTextDelta {
-		m.TextDelta, err = decodeTextDelta(textDelta, constants.RequestKeyTextDelta)
+		m.TextDelta, err = DecodeTextDelta(textDelta, constants.RequestKeyTextDelta)
 		if err != nil {
 			return err
 		}
@@ -135,11 +136,11 @@ type Category struct {
 
 // FromRequest parses and validates a category payload.
 func (m *Category) FromRequest(raw json.RawMessage, requireName bool) error {
-	fields, err := decodeObjectFields(raw, constants.RequestKeyChangeData)
+	fields, err := DecodeObjectFields(raw, constants.RequestKeyChangeData)
 	if err != nil {
 		return err
 	}
-	id, ok, err := getUUIDField(fields, constants.RequestKeyCategoryId)
+	id, ok, err := GetUUIDField(fields, constants.RequestKeyCategoryId)
 	if err != nil {
 		return err
 	}
@@ -150,7 +151,7 @@ func (m *Category) FromRequest(raw json.RawMessage, requireName bool) error {
 	if !requireName {
 		return nil
 	}
-	name, ok, err := getStringField(fields, constants.RequestKeyName)
+	name, ok, err := GetStringField(fields, constants.RequestKeyName)
 	if err != nil {
 		return err
 	}
@@ -166,7 +167,7 @@ func (m *Operation) FromRequest(request ClientOperation) error {
 	if err := request.Validate(); err != nil {
 		return err
 	}
-	fields, err := decodeChangeObject(request.ChangeData)
+	fields, err := DecodeChangeObject(request.ChangeData)
 	if err != nil {
 		return fmt.Errorf("%s is invalid.", constants.RequestKeyChangeData)
 	}
@@ -197,7 +198,7 @@ func (op ClientOperation) Entity(ownerID uuid.UUID, deviceID string, blockID *uu
 		OperationType:        op.OperationType,
 		BaseNoteVersion:      baseVersion,
 		ResultingNoteVersion: resultingVersion,
-		ChangeFormat:         normalizeChangeFormat(op.ChangeFormat),
+		ChangeFormat:         NormalizeChangeFormat(op.ChangeFormat),
 		SchemaVersion:        1,
 		ChangeData:           op.ChangeData,
 	}, nil

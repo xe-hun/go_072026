@@ -1,7 +1,8 @@
-package syncapi
+package models
 
 import (
 	"encoding/json"
+	. "notes-server/internal/sync/operations"
 	"strings"
 	"testing"
 
@@ -43,9 +44,9 @@ func TestRejectedDTOReasons(t *testing.T) {
 		got    RejectedDTO
 		reason RejectionReason
 	}{
-		{name: "invalid request", got: rejectedInvalid(op, "Invalid operation."), reason: RejectionReasonInvalidRequest},
-		{name: "not found", got: rejectedNotFound(op, "Note not found."), reason: RejectionReasonNotFound},
-		{name: "version conflict", got: rejectedConflict(op, 4), reason: RejectionReasonVersionConflict},
+		{name: "invalid request", got: RejectedInvalid(op, "Invalid operation."), reason: RejectionReasonInvalidRequest},
+		{name: "not found", got: RejectedNotFound(op, "Note not found."), reason: RejectionReasonNotFound},
+		{name: "version conflict", got: RejectedConflict(op, 4), reason: RejectionReasonVersionConflict},
 	}
 
 	for _, test := range tests {

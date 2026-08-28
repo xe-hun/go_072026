@@ -1,4 +1,4 @@
-package syncapi
+package operations
 
 import (
 	"bytes"
@@ -43,24 +43,24 @@ type TextDelta struct {
 	InsertText  string `json:"insertText"`
 }
 
-// normalizeChangeFormat treats an omitted changeFormat as the v1 default.
-func normalizeChangeFormat(format string) string {
+// NormalizeChangeFormat treats an omitted changeFormat as the v1 default.
+func NormalizeChangeFormat(format string) string {
 	if strings.TrimSpace(format) == "" {
 		return ChangeFormatStructuredV1
 	}
 	return format
 }
 
-// decodeChangeObject extracts the direct object payload from changeData.
-func decodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
+// DecodeChangeObject extracts the direct object payload from changeData.
+func DecodeChangeObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return map[string]json.RawMessage{}, nil
 	}
-	return decodeObjectFields(raw, constants.RequestKeyChangeData)
+	return DecodeObjectFields(raw, constants.RequestKeyChangeData)
 }
 
-// decodeObjectFields validates and decodes a JSON object into raw field values.
-func decodeObjectFields(raw json.RawMessage, name string) (map[string]json.RawMessage, error) {
+// DecodeObjectFields validates and decodes a JSON object into raw field values.
+func DecodeObjectFields(raw json.RawMessage, name string) (map[string]json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return nil, fmt.Errorf("%s must be an object", name)
@@ -76,9 +76,9 @@ func decodeObjectFields(raw json.RawMessage, name string) (map[string]json.RawMe
 	return fields, nil
 }
 
-// getStringField reads an optional string field. The bool reports whether the
+// GetStringField reads an optional string field. The bool reports whether the
 // field was present.
-func getStringField(fields map[string]json.RawMessage, key string) (string, bool, error) {
+func GetStringField(fields map[string]json.RawMessage, key string) (string, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return "", false, nil
@@ -90,9 +90,9 @@ func getStringField(fields map[string]json.RawMessage, key string) (string, bool
 	return value, true, nil
 }
 
-// getIntField reads an optional integer field. The bool reports whether the
+// GetIntField reads an optional integer field. The bool reports whether the
 // field was present.
-func getIntField(fields map[string]json.RawMessage, key string) (int, bool, error) {
+func GetIntField(fields map[string]json.RawMessage, key string) (int, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return 0, false, nil
@@ -104,13 +104,13 @@ func getIntField(fields map[string]json.RawMessage, key string) (int, bool, erro
 	return value, true, nil
 }
 
-// getFloatField reads an optional JSON number.
-func getFloatField(fields map[string]json.RawMessage, key string) (float64, bool, error) {
+// GetFloatField reads an optional JSON number.
+func GetFloatField(fields map[string]json.RawMessage, key string) (float64, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return 0, false, nil
 	}
-	if isJSONNull(raw) {
+	if IsJSONNull(raw) {
 		return 0, true, fmt.Errorf("%s must be a number", key)
 	}
 	var value float64
@@ -120,13 +120,13 @@ func getFloatField(fields map[string]json.RawMessage, key string) (float64, bool
 	return value, true, nil
 }
 
-// getArrayField reads an optional JSON array as raw element values.
-func getArrayField(fields map[string]json.RawMessage, key string) ([]json.RawMessage, bool, error) {
+// GetArrayField reads an optional JSON array as raw element values.
+func GetArrayField(fields map[string]json.RawMessage, key string) ([]json.RawMessage, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return nil, false, nil
 	}
-	if isJSONNull(raw) {
+	if IsJSONNull(raw) {
 		return nil, true, fmt.Errorf("%s must be an array", key)
 	}
 	var values []json.RawMessage
@@ -136,9 +136,9 @@ func getArrayField(fields map[string]json.RawMessage, key string) ([]json.RawMes
 	return values, true, nil
 }
 
-// getObjectField reads an optional JSON object field and returns the raw object
+// GetObjectField reads an optional JSON object field and returns the raw object
 // so it can be stored in JSONB without reformatting.
-func getObjectField(fields map[string]json.RawMessage, key string) (json.RawMessage, bool, error) {
+func GetObjectField(fields map[string]json.RawMessage, key string) (json.RawMessage, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return nil, false, nil
@@ -157,13 +157,13 @@ func getObjectField(fields map[string]json.RawMessage, key string) (json.RawMess
 	return json.RawMessage(trimmed), true, nil
 }
 
-// getUUIDField reads a required UUID field.
-func getUUIDField(fields map[string]json.RawMessage, key string) (uuid.UUID, bool, error) {
+// GetUUIDField reads a required UUID field.
+func GetUUIDField(fields map[string]json.RawMessage, key string) (uuid.UUID, bool, error) {
 	raw, ok := fields[key]
 	if !ok {
 		return uuid.Nil, false, nil
 	}
-	if isJSONNull(raw) {
+	if IsJSONNull(raw) {
 		return uuid.Nil, true, fmt.Errorf("%s must be a UUID", key)
 	}
 	var id uuid.UUID
@@ -173,27 +173,27 @@ func getUUIDField(fields map[string]json.RawMessage, key string) (uuid.UUID, boo
 	return id, true, nil
 }
 
-// decodeTextDelta decodes a full text delta object.
-func decodeTextDelta(raw json.RawMessage, name string) (TextDelta, error) {
-	fields, err := decodeObjectFields(raw, name)
+// DecodeTextDelta decodes a full text delta object.
+func DecodeTextDelta(raw json.RawMessage, name string) (TextDelta, error) {
+	fields, err := DecodeObjectFields(raw, name)
 	if err != nil {
 		return TextDelta{}, err
 	}
-	index, ok, err := getIntField(fields, constants.RequestKeyIndex)
+	index, ok, err := GetIntField(fields, constants.RequestKeyIndex)
 	if err != nil {
 		return TextDelta{}, err
 	}
 	if !ok {
 		return TextDelta{}, fmt.Errorf("%s is required", constants.RequestKeyIndex)
 	}
-	deleteCount, ok, err := getIntField(fields, constants.RequestKeyDeleteCount)
+	deleteCount, ok, err := GetIntField(fields, constants.RequestKeyDeleteCount)
 	if err != nil {
 		return TextDelta{}, err
 	}
 	if !ok {
 		return TextDelta{}, fmt.Errorf("%s is required", constants.RequestKeyDeleteCount)
 	}
-	insertText, ok, err := getStringField(fields, constants.RequestKeyInsertText)
+	insertText, ok, err := GetStringField(fields, constants.RequestKeyInsertText)
 	if err != nil {
 		return TextDelta{}, err
 	}
@@ -207,12 +207,12 @@ func decodeTextDelta(raw json.RawMessage, name string) (TextDelta, error) {
 	}, nil
 }
 
-func isJSONNull(raw json.RawMessage) bool {
+func IsJSONNull(raw json.RawMessage) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
-// validateBlockType enforces the block type allow-list.
-func validateBlockType(blockType string) error {
+// ValidateBlockType enforces the block type allow-list.
+func ValidateBlockType(blockType string) error {
 	if _, ok := allowedBlockTypes[blockType]; !ok {
 		return fmt.Errorf("%s %q is unsupported", constants.RequestKeyBlockType, blockType)
 	}

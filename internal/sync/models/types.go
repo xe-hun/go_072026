@@ -1,4 +1,4 @@
-package syncapi
+package models
 
 import (
 	"encoding/json"
@@ -102,7 +102,7 @@ type AcceptedDTO struct {
 	ServerNoteVersion int64     `json:"serverNoteVersion"`
 	// globalSequence is internal transaction metadata used to publish the
 	// post-commit realtime hint; it is deliberately not part of the HTTP DTO.
-	globalSequence int64
+	GlobalSequence int64 `json:"-"`
 }
 
 // RejectedDTO reports why one note batch in an otherwise valid sync request

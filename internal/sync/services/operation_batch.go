@@ -1,4 +1,4 @@
-package syncapi
+package services
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/models"
 	"sort"
 )
 
@@ -101,8 +102,8 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 				return err
 			}
 			changed = changed || operationChanged
-			if operationChanged && accepted != nil && accepted.globalSequence > latestCursor {
-				latestCursor = accepted.globalSequence
+			if operationChanged && accepted != nil && accepted.GlobalSequence > latestCursor {
+				latestCursor = accepted.GlobalSequence
 			}
 
 			if rejected != nil {
@@ -150,7 +151,7 @@ func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, owne
 	accepted := AcceptedDTO{
 		NoteID:            operations[0].NoteID,
 		ServerNoteVersion: noteVersion,
-		globalSequence:    latestCursor,
+		GlobalSequence:    latestCursor,
 	}
 	return &accepted, nil, nil
 }

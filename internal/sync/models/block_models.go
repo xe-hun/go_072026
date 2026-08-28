@@ -1,4 +1,4 @@
-package syncapi
+package models
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	constants "notes-server/internal"
 	"notes-server/internal/store"
+	. "notes-server/internal/sync/operations"
 	"strconv"
 	"strings"
 )
@@ -22,11 +23,11 @@ type BlockModel struct {
 
 // FromCreateOperation parses the create_block changeData wrapper.
 func (m *BlockModel) FromCreateOperation(raw json.RawMessage) error {
-	fields, err := decodeChangeObject(raw)
+	fields, err := DecodeChangeObject(raw)
 	if err != nil {
 		return err
 	}
-	block, ok, err := getObjectField(fields, constants.RequestKeyBlock)
+	block, ok, err := GetObjectField(fields, constants.RequestKeyBlock)
 	if err != nil {
 		return err
 	}
@@ -38,28 +39,28 @@ func (m *BlockModel) FromCreateOperation(raw json.RawMessage) error {
 
 // FromRequest parses and validates a direct block payload.
 func (m *BlockModel) FromRequest(raw json.RawMessage) error {
-	blockSnapShotFields, err := decodeObjectFields(raw, constants.RequestKeyBlock)
+	blockSnapShotFields, err := DecodeObjectFields(raw, constants.RequestKeyBlock)
 	if err != nil {
 		return err
 	}
-	blockId, ok, err := getUUIDField(blockSnapShotFields, constants.RequestKeyBlockId)
+	blockId, ok, err := GetUUIDField(blockSnapShotFields, constants.RequestKeyBlockId)
 	if err != nil {
 		return err
 	}
 	if !ok || blockId == uuid.Nil {
 		return fmt.Errorf("%s is required", constants.RequestKeyBlockId)
 	}
-	blockType, ok, err := getStringField(blockSnapShotFields, constants.RequestKeyBlockType)
+	blockType, ok, err := GetStringField(blockSnapShotFields, constants.RequestKeyBlockType)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("%s is required", constants.RequestKeyBlockType)
 	}
-	if err := validateBlockType(blockType); err != nil {
+	if err := ValidateBlockType(blockType); err != nil {
 		return err
 	}
-	position, ok, err := getFloatField(blockSnapShotFields, constants.RequestKeyPosition)
+	position, ok, err := GetFloatField(blockSnapShotFields, constants.RequestKeyPosition)
 	if err != nil {
 		return err
 	}
@@ -69,14 +70,14 @@ func (m *BlockModel) FromRequest(raw json.RawMessage) error {
 	if position < 0 {
 		return fmt.Errorf("%s must be greater than or equal to zero", constants.RequestKeyPosition)
 	}
-	textContent, ok, err := getStringField(blockSnapShotFields, constants.RequestKeyTextContent)
+	textContent, ok, err := GetStringField(blockSnapShotFields, constants.RequestKeyTextContent)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("%s is required", constants.RequestKeyTextContent)
 	}
-	blockProperties, ok, err := getObjectField(blockSnapShotFields, constants.RequestKeyBlockProperties)
+	blockProperties, ok, err := GetObjectField(blockSnapShotFields, constants.RequestKeyBlockProperties)
 	if err != nil {
 		return err
 	}
@@ -109,7 +110,7 @@ func (m BlockModel) Entity(noteID uuid.UUID) (store.NoteBlock, error) {
 	if noteID == uuid.Nil || m.BlockId == uuid.Nil {
 		return store.NoteBlock{}, errors.New("block identifiers are required")
 	}
-	if err := validateBlockType(m.BlockType); err != nil {
+	if err := ValidateBlockType(m.BlockType); err != nil {
 		return store.NoteBlock{}, err
 	}
 	if strings.TrimSpace(m.Position) == "" {
