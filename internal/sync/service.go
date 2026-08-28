@@ -126,8 +126,8 @@ func (s *Service) Sync(ctx context.Context, ownerID uuid.UUID, req Request) (Res
 }
 
 // SyncFullNote validates the requesting device and returns the current note
-// document as a rejection snapshot for each supplied note ID.
-func (s *Service) SyncFullNote(ctx context.Context, ownerID uuid.UUID, req FullNoteRequest) ([]RejectedDTO, error) {
+// snapshot for each supplied note ID.
+func (s *Service) SyncFullNote(ctx context.Context, ownerID uuid.UUID, req FullNoteRequest) ([]NoteSnapshot, error) {
 	if !constants.ValidDeviceID(req.DeviceID) {
 		return nil, httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required and must be 30 characters or fewer.")
 	}
@@ -154,17 +154,11 @@ func (s *Service) SyncFullNote(ctx context.Context, ownerID uuid.UUID, req FullN
 		return nil, httpapi.NewError(http.StatusForbidden, httpapi.CodeDeviceRevoked, "Device has been revoked.")
 	}
 
-	rejected := make([]RejectedDTO, 0, len(req.NoteIDs))
+	snapshots := make([]NoteSnapshot, 0, len(req.NoteIDs))
 	for _, noteID := range req.NoteIDs {
 		document, err := s.store.GetNoteDocument(ctx, noteID, ownerID)
 		if errors.Is(err, store.ErrNotFound) {
-			rejected = append(rejected, RejectedDTO{
-				Code:    httpapi.CodeNotFound,
-				Reason:  RejectionReasonNotFound,
-				Message: "Note not found.",
-				NoteID:  noteID,
-			})
-			continue
+			return nil, httpapi.NotFound("Note not found.")
 		}
 		if err != nil {
 			return nil, err
@@ -173,16 +167,9 @@ func (s *Service) SyncFullNote(ctx context.Context, ownerID uuid.UUID, req FullN
 		if err := snapshot.FromEntity(document); err != nil {
 			return nil, err
 		}
-		rejected = append(rejected, RejectedDTO{
-			Code:              "CLIENT_REJECT_CHANGE",
-			Reason:            RejectionReasonClientRejectChange,
-			Message:           "The client rejected the server change.",
-			NoteID:            noteID,
-			NoteSnapshot:      &snapshot,
-			ServerNoteVersion: document.Note.CurrentVersion,
-		})
+		snapshots = append(snapshots, snapshot)
 	}
-	return rejected, nil
+	return snapshots, nil
 }
 
 // publishCommittedSyncAvailable publishes a best-effort hint after WithTx has

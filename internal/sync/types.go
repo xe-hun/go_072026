@@ -15,10 +15,9 @@ const ProtocolVersion = 1
 type RejectionReason string
 
 const (
-	RejectionReasonInvalidRequest     RejectionReason = "invalidRequest"
-	RejectionReasonNotFound           RejectionReason = "notFound"
-	RejectionReasonVersionConflict    RejectionReason = "versionConflict"
-	RejectionReasonClientRejectChange RejectionReason = "ClientRejectChange"
+	RejectionReasonInvalidRequest  RejectionReason = "invalidRequest"
+	RejectionReasonNotFound        RejectionReason = "notFound"
+	RejectionReasonVersionConflict RejectionReason = "versionConflict"
 )
 
 // Request is the JSON body accepted by POST /v1/sync.

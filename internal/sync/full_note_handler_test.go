@@ -8,7 +8,7 @@ import (
 )
 
 func TestSyncFullNoteHTTPRequiresAuthentication(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/v1/sync/syncFullNote", bytes.NewBufferString(`{"deviceId":"phone","noteIds":[]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/syncFullNote", bytes.NewBufferString(`{"deviceId":"phone","noteIds":[]}`))
 	recorder := httptest.NewRecorder()
 
 	NewHandler(nil).SyncFullNoteHTTP(recorder, req)

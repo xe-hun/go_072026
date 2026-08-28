@@ -77,8 +77,7 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-// SyncFullNoteHTTP returns the current server snapshot for each note the client
-// asks to reject during full-note conflict resolution.
+// SyncFullNoteHTTP returns the current server snapshot for each requested note.
 func (h *Handler) SyncFullNoteHTTP(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
@@ -91,12 +90,12 @@ func (h *Handler) SyncFullNoteHTTP(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	rejected, err := h.service.SyncFullNote(r.Context(), ownerID, req)
+	snapshots, err := h.service.SyncFullNote(r.Context(), ownerID, req)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, rejected)
+	httpapi.WriteJSON(w, http.StatusOK, snapshots)
 }
 
 // ServeHTTP decodes the sync JSON request, fetches authenticated owner identity,
