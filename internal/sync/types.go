@@ -10,6 +10,16 @@ import (
 // ProtocolVersion is the only sync protocol version accepted by this server.
 const ProtocolVersion = 1
 
+// RejectionReason identifies the machine-readable cause of a rejected note
+// batch. Message contains the corresponding user-friendly explanation.
+type RejectionReason string
+
+const (
+	RejectionReasonInvalidRequest  RejectionReason = "invalidRequest"
+	RejectionReasonNotFound        RejectionReason = "notFound"
+	RejectionReasonVersionConflict RejectionReason = "versionConflict"
+)
+
 // Request is the JSON body accepted by POST /v1/sync.
 type Request struct {
 	// ProtocolVersion must match ProtocolVersion.
@@ -91,10 +101,11 @@ type AcceptedDTO struct {
 // RejectedDTO reports why one note batch in an otherwise valid sync request
 // could not be applied.
 type RejectedDTO struct {
-	Code         string        `json:"code"`
-	Message      string        `json:"message,omitempty"`
-	NoteID       uuid.UUID     `json:"noteId,omitempty"`
-	NoteSnapshot *NoteSnapshot `json:"noteSnapshot,omitempty"`
+	Code         string          `json:"code"`
+	Reason       RejectionReason `json:"reason"`
+	Message      string          `json:"message,omitempty"`
+	NoteID       uuid.UUID       `json:"noteId,omitempty"`
+	NoteSnapshot *NoteSnapshot   `json:"noteSnapshot,omitempty"`
 	// Client/server versions are included for conflict resolution UI.
 	ClientNoteVersion int64 `json:"clientNoteVersion,omitempty"`
 	ServerNoteVersion int64 `json:"serverNoteVersion,omitempty"`

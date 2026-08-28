@@ -8,6 +8,8 @@ const (
 	// a client-supplied device identifier.
 	DeviceIDMaxLength = 30
 
+	RequestKeyConflict = "note_conflict"
+
 	//commonkeys
 	// RequestKeyID         = "id"
 	RequestKeyBlockId    = "blockId"

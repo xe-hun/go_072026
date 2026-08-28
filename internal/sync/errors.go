@@ -6,6 +6,7 @@ import "notes-server/internal/httpapi"
 func rejectedInvalid(op ClientOperation, message string) RejectedDTO {
 	return RejectedDTO{
 		Code:    httpapi.CodeInvalidRequest,
+		Reason:  RejectionReasonInvalidRequest,
 		Message: message,
 		NoteID:  op.NoteID,
 	}
@@ -15,6 +16,7 @@ func rejectedInvalid(op ClientOperation, message string) RejectedDTO {
 func rejectedNotFound(op ClientOperation, message string) RejectedDTO {
 	return RejectedDTO{
 		Code:    httpapi.CodeNotFound,
+		Reason:  RejectionReasonNotFound,
 		Message: message,
 		NoteID:  op.NoteID,
 	}
@@ -25,6 +27,8 @@ func rejectedNotFound(op ClientOperation, message string) RejectedDTO {
 func rejectedConflict(op ClientOperation, serverNoteVersion int64) RejectedDTO {
 	return RejectedDTO{
 		Code:              httpapi.CodeBaseVersionConflict,
+		Reason:            RejectionReasonVersionConflict,
+		Message:           "The note has changed since it was last synchronized.",
 		NoteID:            op.NoteID,
 		ClientNoteVersion: op.BaseNoteVersion,
 		ServerNoteVersion: serverNoteVersion,

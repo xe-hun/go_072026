@@ -36,6 +36,30 @@ func TestSyncResponseContracts(t *testing.T) {
 	}
 }
 
+func TestRejectedDTOReasons(t *testing.T) {
+	op := ClientOperation{NoteID: uuid.New(), BaseNoteVersion: 3}
+	tests := []struct {
+		name   string
+		got    RejectedDTO
+		reason RejectionReason
+	}{
+		{name: "invalid request", got: rejectedInvalid(op, "Invalid operation."), reason: RejectionReasonInvalidRequest},
+		{name: "not found", got: rejectedNotFound(op, "Note not found."), reason: RejectionReasonNotFound},
+		{name: "version conflict", got: rejectedConflict(op, 4), reason: RejectionReasonVersionConflict},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.got.Reason != test.reason {
+				t.Fatalf("reason = %q, want %q", test.got.Reason, test.reason)
+			}
+			if test.got.Message == "" {
+				t.Fatal("message must contain a user-friendly rejection explanation")
+			}
+		})
+	}
+}
+
 func TestPullRequestValidate(t *testing.T) {
 	valid := PullRequest{ProtocolVersion: ProtocolVersion, DeviceID: "laptop-main", Cursor: 0}
 	if err := valid.Validate(); err != nil {
