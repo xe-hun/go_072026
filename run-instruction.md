@@ -275,7 +275,7 @@ Generate UUIDs for the operation and note. Then send:
       "changeFormat": "structured-operation-v1",
       "changeData": {
         "title": "Shopping",
-        "noteProperties": {
+        "Noteproperties": {
           "isPinned": true
         },
         "blocks": []
@@ -311,7 +311,7 @@ Use the note version returned from the note creation response:
         "blockType": "todo",
         "position": 1.0,
         "textContent": "Buy milk",
-        "blockProperties": {
+        "BlockProperties": {
           "isChecked": false
         }
       }

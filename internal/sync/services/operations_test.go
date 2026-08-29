@@ -121,7 +121,7 @@ func TestNextCursorIncludesPulledSequenceWhenPullIsExhausted(t *testing.T) {
 
 // TestValidateBlockType protects the initial block type allow-list.
 func TestValidateBlockType(t *testing.T) {
-	for _, blockType := range []string{"text", "bullet", "todo", "numbered_list", "attachment"} {
+	for _, blockType := range []string{"text", "bullet", "todo", "numberedList", "attachment"} {
 		if err := ValidateBlockType(blockType); err != nil {
 			t.Fatalf("expected %q to be valid: %v", blockType, err)
 		}

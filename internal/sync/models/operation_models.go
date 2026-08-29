@@ -19,7 +19,7 @@ type Operation struct {
 
 // NoteMutation is the validated payload model for note updates.
 type NoteMutation struct {
-	NoteProperties map[string]json.RawMessage
+	NoteProperties json.RawMessage
 	HasProperties  bool
 	TextDelta      TextDelta
 	HasTextDelta   bool
@@ -38,16 +38,9 @@ func (m *NoteMutation) FromRequest(raw json.RawMessage, operationType string) er
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("%s must include at least one property", OperationModifyNoteProperty)
+			return fmt.Errorf("%s requires %s", OperationModifyNoteProperty, constants.RequestKeyNoteProperties)
 		}
-		properties, err := DecodeObjectFields(propertiesRaw, constants.RequestKeyNoteProperties)
-		if err != nil {
-			return err
-		}
-		if len(properties) == 0 {
-			return fmt.Errorf("%s must include at least one property", OperationModifyNoteProperty)
-		}
-		m.NoteProperties = properties
+		m.NoteProperties = propertiesRaw
 		m.HasProperties = true
 	case OperationModifyNoteTitle:
 		textDelta, ok, err := GetObjectField(fields, constants.RequestKeyTextDelta)
@@ -72,11 +65,11 @@ func (m *NoteMutation) FromRequest(raw json.RawMessage, operationType string) er
 
 // BlockMutation is the validated payload model for block updates and deletes.
 type BlockMutation struct {
-	ID                uuid.UUID
-	ChangedProperties map[string]json.RawMessage
-	HasProperties     bool
-	TextDelta         TextDelta
-	HasTextDelta      bool
+	ID              uuid.UUID
+	BlockProperties json.RawMessage
+	HasProperties   bool
+	TextDelta       TextDelta
+	HasTextDelta    bool
 }
 
 // FromRequest parses and validates a block mutation payload.
@@ -99,16 +92,12 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 	if operationType != OperationModifyBlock {
 		return errors.New("unsupported block mutation")
 	}
-	propertiesRaw, hasProperties := changeDataFields[constants.RequestKeyChangedProperties]
-	if hasProperties && !IsJSONNull(propertiesRaw) {
-		propertiesRaw, _, err = GetObjectField(changeDataFields, constants.RequestKeyChangedProperties)
-		if err != nil {
-			return err
-		}
-		m.ChangedProperties, err = DecodeObjectFields(propertiesRaw, constants.RequestKeyChangedProperties)
-		if err != nil {
-			return err
-		}
+	propertiesRaw, hasProperties, err := GetObjectField(changeDataFields, constants.RequestKeyBlockProperties)
+	if err != nil {
+		return err
+	}
+	if hasProperties {
+		m.BlockProperties = propertiesRaw
 	}
 	textDelta, hasTextDelta, err := GetObjectField(changeDataFields, constants.RequestKeyTextDelta)
 	if err != nil {
@@ -122,7 +111,7 @@ func (m *BlockMutation) FromRequest(raw json.RawMessage, operationType string) e
 		m.HasTextDelta = true
 	}
 	if !hasProperties && !m.HasTextDelta {
-		return fmt.Errorf("%s must include %s or %s", OperationModifyBlock, constants.RequestKeyChangedProperties, constants.RequestKeyTextDelta)
+		return fmt.Errorf("%s must include %s or %s", OperationModifyBlock, constants.RequestKeyBlockProperties, constants.RequestKeyTextDelta)
 	}
 	m.HasProperties = hasProperties
 	return nil

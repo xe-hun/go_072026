@@ -2,10 +2,8 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	constants "notes-server/internal"
 	"notes-server/internal/store"
 	. "notes-server/internal/sync/models"
 	. "notes-server/internal/sync/operations"
@@ -101,13 +99,8 @@ func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	if err != nil {
 		return nil, nil, err
 	}
-	if mutation.HasProperties && len(mutation.ChangedProperties) > 0 {
-		blockProperties, err := mergeJSONProperties(block.BlockProperties, mutation.ChangedProperties, constants.RequestKeyBlockProperties)
-		if err != nil {
-			rejected := RejectedInvalid(op, err.Error())
-			return nil, &rejected, nil
-		}
-		block.BlockProperties = blockProperties
+	if mutation.HasProperties {
+		block.BlockProperties = mutation.BlockProperties
 	}
 	if mutation.HasTextDelta {
 		text, err := applyTextDelta(block.TextContent, mutation.TextDelta)
@@ -141,15 +134,4 @@ func applyTextDelta(text string, delta TextDelta) (string, error) {
 	result = append(result, insertRunes...)
 	result = append(result, textRunes[end:]...)
 	return string(result), nil
-}
-
-func mergeJSONProperties(current json.RawMessage, changes map[string]json.RawMessage, name string) (json.RawMessage, error) {
-	merged, err := DecodeObjectFields(store.NormalizeJSON(current), name)
-	if err != nil {
-		return nil, err
-	}
-	for key, value := range changes {
-		merged[key] = value
-	}
-	return json.Marshal(merged)
 }

@@ -89,13 +89,13 @@ func TestNoteModelFromRequestBuildsNoteEntity(t *testing.T) {
 		OperationType: OperationCreateNote,
 		ChangeData: json.RawMessage(`{
 			"title":"Shopping",
-			"noteProperties":{"isPinned":true},
+			"Noteproperties":{"isPinned":true},
 			"blocks":[{
-				"id":"` + blockID.String() + `",
+				"blockId":"` + blockID.String() + `",
 				"blockType":"todo",
 				"position":1.5,
 				"textContent":"Buy milk",
-				"blockProperties":{"isChecked":false}
+				"BlockProperties":{"isChecked":false}
 			}]
 		}`),
 	}
@@ -137,11 +137,11 @@ func TestBlockModelFromCreateOperationUsesBlockField(t *testing.T) {
 	var model BlockModel
 	err := model.FromCreateOperation(json.RawMessage(`{
 		"block": {
-			"id":"` + blockID.String() + `",
+			"blockId":"` + blockID.String() + `",
 			"blockType":"text",
 			"position":1,
 			"textContent":"hello",
-			"blockProperties":{}
+			"BlockProperties":{}
 		}
 	}`))
 	if err != nil {
@@ -152,12 +152,12 @@ func TestBlockModelFromCreateOperationUsesBlockField(t *testing.T) {
 	}
 }
 
-func TestBlockMutationFromRequestUsesChangedPropertiesAndTextDelta(t *testing.T) {
+func TestBlockMutationFromRequestUsesBlockPropertiesAndTextDelta(t *testing.T) {
 	blockID := uuid.New()
 	var mutation BlockMutation
 	err := mutation.FromRequest(json.RawMessage(`{
-		"id":"`+blockID.String()+`",
-		"changedProperties":{"checked":true},
+		"blockId":"`+blockID.String()+`",
+		"BlockProperties":{"checked":true},
 		"textDelta":{"index":0,"deleteCount":0,"insertText":"x"}
 	}`), OperationModifyBlock)
 	if err != nil {
@@ -166,7 +166,35 @@ func TestBlockMutationFromRequestUsesChangedPropertiesAndTextDelta(t *testing.T)
 	if mutation.ID != blockID || !mutation.HasProperties || !mutation.HasTextDelta {
 		t.Fatalf("unexpected block mutation: %+v", mutation)
 	}
-	if string(mutation.ChangedProperties["checked"]) != "true" {
-		t.Fatalf("changedProperties not decoded: %s", mutation.ChangedProperties["checked"])
+	if string(mutation.BlockProperties) != `{"checked":true}` {
+		t.Fatalf("BlockProperties not decoded: %s", mutation.BlockProperties)
+	}
+}
+
+func TestBlockMutationFromRequestAllowsEmptyBlockProperties(t *testing.T) {
+	blockID := uuid.New()
+	var mutation BlockMutation
+	err := mutation.FromRequest(json.RawMessage(`{
+		"blockId":"`+blockID.String()+`",
+		"BlockProperties":{}
+	}`), OperationModifyBlock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mutation.HasProperties || string(mutation.BlockProperties) != `{}` {
+		t.Fatalf("unexpected block mutation: %+v", mutation)
+	}
+}
+
+func TestNoteMutationFromRequestUsesNoteProperties(t *testing.T) {
+	var mutation NoteMutation
+	err := mutation.FromRequest(json.RawMessage(`{
+		"Noteproperties":{}
+	}`), OperationModifyNoteProperty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mutation.HasProperties || string(mutation.NoteProperties) != `{}` {
+		t.Fatalf("unexpected note mutation: %+v", mutation)
 	}
 }

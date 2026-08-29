@@ -117,10 +117,10 @@ returns `changes`, `hasMore`, and `nextCursor`; pulled changes expose
 The updates-available endpoint uses the authenticated user's persisted device
 cursor and returns `updatesAvailable` without fetching the change records.
 
-`modify_note_property` writes the supplied `noteProperties` object into the
-note, `modify_note_title` receives a nested `textDelta`, `create_block` receives
-a nested `block`, and `modify_block` receives `changedProperties` plus an
-optional nested `textDelta`. Each `textDelta` is
+`modify_note_property` replaces the note's properties with the supplied
+`Noteproperties` object, `modify_note_title` receives a nested `textDelta`,
+`create_block` receives a nested `block`, and `modify_block` receives a
+`BlockProperties` object plus an optional nested `textDelta`. Each `textDelta` is
 `{"index":0,"deleteCount":0,"insertText":"..."}`. Block IDs are
 inside each operation's `changeData`. `create_category`, `modify_category`, and `delete_category` use
 `{id,name}` or `{id}` payloads respectively; note categories are metadata,

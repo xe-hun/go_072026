@@ -362,7 +362,7 @@ Operation payloads use direct operation-specific objects:
 
 ```json
 {
-  "noteProperties": {
+  "Noteproperties": {
     "isPinned": true
   }
 }
@@ -370,9 +370,9 @@ Operation payloads use direct operation-specific objects:
 
 `modify_note_title` uses `{ "textDelta": { "index": 8, "deleteCount": 0,
 "insertText": " and bread" } }`.
-`create_block` uses `{ "block": { "id": "uuid", "blockType": "text", "position": 1.0, "textContent": "...", "blockProperties": {} } }`,
+`create_block` uses `{ "block": { "id": "uuid", "blockType": "text", "position": 1.0, "textContent": "...", "BlockProperties": {} } }`,
 `delete_block` uses `{ "id": "uuid" }`, and
-`modify_block` uses `changedProperties` and `textDelta` in the same direct object.
+`modify_block` uses `BlockProperties` and `textDelta` in the same direct object.
 Category operations use `{ "id": "uuid", "name": "name" }`
 for create/modify and `{ "id": "uuid" }` for delete.
 

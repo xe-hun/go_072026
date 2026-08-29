@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	constants "notes-server/internal"
 	"notes-server/internal/store"
 	. "notes-server/internal/sync/models"
 	. "notes-server/internal/sync/operations"
@@ -111,12 +110,7 @@ func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, owner
 	if rejected, err := s.existingNote(ctx, tx, ownerID, state, op); err != nil || rejected != nil {
 		return nil, rejected, err
 	}
-	noteProperties, err := mergeJSONProperties(state.note.NoteProperties, mutation.NoteProperties, constants.RequestKeyNoteProperties)
-	if err != nil {
-		rejected := RejectedInvalid(op, err.Error())
-		return nil, &rejected, nil
-	}
-	state.note.NoteProperties = noteProperties
+	state.note.NoteProperties = mutation.NoteProperties
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 

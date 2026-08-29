@@ -35,23 +35,22 @@ const (
 	RequestKeyDeleteCount = "deleteCount"
 	RequestKeyInsertText  = "insertText"
 
-	//note Properties
-	RequestKeyNoteID            = "noteId"
-	RequestKeySequence          = "sequence"
-	RequestKeyTitle             = "title"
-	RequestKeyBaseNoteVersion   = "baseNoteVersion"
-	RequestKeyChangeData        = "changeData"
-	RequestKeyNoteProperties    = "noteProperties"
-	RequestKeyChangedProperties = "changedProperties"
-	RequestKeyName              = "CategoryName"
-	RequestKeyTextContent       = "textContent"
-	RequestKeyBlocks            = "blocks"
+	// Note properties.
+	RequestKeyNoteID          = "noteId"
+	RequestKeySequence        = "sequence"
+	RequestKeyTitle           = "title"
+	RequestKeyBaseNoteVersion = "baseNoteVersion"
+	RequestKeyChangeData      = "changeData"
+	RequestKeyNoteProperties  = "Noteproperties"
+	RequestKeyName            = "CategoryName"
+	RequestKeyTextContent     = "textContent"
+	RequestKeyBlocks          = "blocks"
 
-	//block Properties
+	// Block properties.
 	RequestKeyBlock           = "block"
 	RequestKeyBlockType       = "blockType"
 	RequestKeyPosition        = "position"
-	RequestKeyBlockProperties = "blockProperties"
+	RequestKeyBlockProperties = "BlockProperties"
 
 	// Supported block types.
 	BlockTypeText         = "text"
