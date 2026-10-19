@@ -89,13 +89,13 @@ func TestNoteModelFromRequestBuildsNoteEntity(t *testing.T) {
 		OperationType: OperationCreateNote,
 		ChangeData: json.RawMessage(`{
 			"title":"Shopping",
-			"Noteproperties":{"isPinned":true},
+			"noteProperties":{"isPinned":true},
 			"blocks":[{
 				"blockId":"` + blockID.String() + `",
 				"blockType":"todo",
 				"position":1.5,
 				"textContent":"Buy milk",
-				"BlockProperties":{"isChecked":false}
+				"blockProperties":{"isChecked":false}
 			}]
 		}`),
 	}
@@ -141,7 +141,7 @@ func TestBlockModelFromCreateOperationUsesBlockField(t *testing.T) {
 			"blockType":"text",
 			"position":1,
 			"textContent":"hello",
-			"BlockProperties":{}
+			"blockProperties":{}
 		}
 	}`))
 	if err != nil {
@@ -157,7 +157,7 @@ func TestBlockMutationFromRequestUsesBlockPropertiesAndTextDelta(t *testing.T) {
 	var mutation BlockMutation
 	err := mutation.FromRequest(json.RawMessage(`{
 		"blockId":"`+blockID.String()+`",
-		"BlockProperties":{"checked":true},
+		"blockProperties":{"checked":true},
 		"textDelta":{"index":0,"deleteCount":0,"insertText":"x"}
 	}`), OperationModifyBlock)
 	if err != nil {
@@ -167,7 +167,7 @@ func TestBlockMutationFromRequestUsesBlockPropertiesAndTextDelta(t *testing.T) {
 		t.Fatalf("unexpected block mutation: %+v", mutation)
 	}
 	if string(mutation.BlockProperties) != `{"checked":true}` {
-		t.Fatalf("BlockProperties not decoded: %s", mutation.BlockProperties)
+		t.Fatalf("blockProperties not decoded: %s", mutation.BlockProperties)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestBlockMutationFromRequestAllowsEmptyBlockProperties(t *testing.T) {
 	var mutation BlockMutation
 	err := mutation.FromRequest(json.RawMessage(`{
 		"blockId":"`+blockID.String()+`",
-		"BlockProperties":{}
+		"blockProperties":{}
 	}`), OperationModifyBlock)
 	if err != nil {
 		t.Fatal(err)
@@ -189,7 +189,7 @@ func TestBlockMutationFromRequestAllowsEmptyBlockProperties(t *testing.T) {
 func TestNoteMutationFromRequestUsesNoteProperties(t *testing.T) {
 	var mutation NoteMutation
 	err := mutation.FromRequest(json.RawMessage(`{
-		"Noteproperties":{}
+		"noteProperties":{}
 	}`), OperationModifyNoteProperty)
 	if err != nil {
 		t.Fatal(err)

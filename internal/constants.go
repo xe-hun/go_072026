@@ -41,8 +41,8 @@ const (
 	RequestKeyTitle           = "title"
 	RequestKeyBaseNoteVersion = "baseNoteVersion"
 	RequestKeyChangeData      = "changeData"
-	RequestKeyNoteProperties  = "Noteproperties"
-	RequestKeyName            = "CategoryName"
+	RequestKeyNoteProperties  = "noteProperties"
+	RequestKeyName            = "categoryName"
 	RequestKeyTextContent     = "textContent"
 	RequestKeyBlocks          = "blocks"
 
@@ -50,7 +50,7 @@ const (
 	RequestKeyBlock           = "block"
 	RequestKeyBlockType       = "blockType"
 	RequestKeyPosition        = "position"
-	RequestKeyBlockProperties = "BlockProperties"
+	RequestKeyBlockProperties = "blockProperties"
 
 	// Supported block types.
 	BlockTypeText         = "text"

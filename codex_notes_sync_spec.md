@@ -362,7 +362,7 @@ Operation payloads use direct operation-specific objects:
 
 ```json
 {
-  "Noteproperties": {
+  "noteproperties": {
     "isPinned": true
   }
 }
