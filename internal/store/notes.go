@@ -43,7 +43,11 @@ func (s *Store) GetNoteDocumentForOwnerForUpdate(ctx context.Context, noteID, ow
 	if err != nil {
 		return NoteDocument{}, err
 	}
-	return NoteDocument{Note: fromDBNote(note), Blocks: blocks}, nil
+	cursor, err := s.GetLastAppliedCursorForNote(ctx, noteID)
+	if err != nil {
+		return NoteDocument{}, err
+	}
+	return NoteDocument{Note: fromDBNote(note), Blocks: blocks, LastAppliedCursor: cursor}, nil
 }
 
 // GetBlockForNoteForUpdate locks one block for a targeted block mutation.
@@ -147,7 +151,11 @@ func (s *Store) GetNoteDocument(ctx context.Context, noteID, ownerID uuid.UUID) 
 	if err != nil {
 		return NoteDocument{}, err
 	}
-	return NoteDocument{Note: note, Blocks: blocks}, nil
+	cursor, err := s.GetLastAppliedCursorForNote(ctx, noteID)
+	if err != nil {
+		return NoteDocument{}, err
+	}
+	return NoteDocument{Note: note, Blocks: blocks, LastAppliedCursor: cursor}, nil
 }
 
 // RawObjectOrEmpty is a small JSON helper for callers that want empty JSONB

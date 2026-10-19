@@ -115,6 +115,8 @@ type NoteSnapshot struct {
 	OwnerID uuid.UUID
 	// Version is the note version represented by SnapshotData.
 	Version int64
+	// LastAppliedCursor is the global change cursor represented by this snapshot.
+	LastAppliedCursor int64
 	// SnapshotFormat names the snapshot JSON format.
 	SnapshotFormat string
 	// SchemaVersion is used for future snapshot migrations.
@@ -188,6 +190,8 @@ type NoteDocument struct {
 	Note Note
 	// Blocks are returned in position order.
 	Blocks []NoteBlock
+	// LastAppliedCursor is the latest global change cursor represented by Note.
+	LastAppliedCursor int64
 }
 
 // NullableUUID converts a pointer UUID into a nil-or-value SQL argument.

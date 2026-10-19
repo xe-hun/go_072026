@@ -123,6 +123,20 @@ func (q *Queries) GetChangesAfterCursor(ctx context.Context, arg GetChangesAfter
 	return items, nil
 }
 
+const getLastAppliedCursorForNote = `-- name: GetLastAppliedCursorForNote :one
+SELECT COALESCE(MAX(global_sequence), 0)::bigint
+FROM note_changes
+WHERE note_id = $1
+`
+
+// Returns the latest global change cursor represented by a note's current state.
+func (q *Queries) GetLastAppliedCursorForNote(ctx context.Context, noteID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getLastAppliedCursorForNote, noteID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const hasChangesAfterCursor = `-- name: HasChangesAfterCursor :one
 SELECT EXISTS (
     SELECT 1

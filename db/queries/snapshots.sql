@@ -10,13 +10,14 @@ LIMIT 1;
 -- name: InsertSnapshot :one
 -- Stores a snapshot and makes retries idempotent by note/version.
 INSERT INTO note_snapshots (
-    id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum
+    id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum, last_applied_cursor
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 ON CONFLICT (note_id, version) DO UPDATE
 SET snapshot_data = EXCLUDED.snapshot_data,
-    checksum = EXCLUDED.checksum
+    checksum = EXCLUDED.checksum,
+    last_applied_cursor = EXCLUDED.last_applied_cursor
 RETURNING *;
 
 -- name: EnqueueOutboxJob :one

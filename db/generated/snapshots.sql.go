@@ -123,7 +123,7 @@ func (q *Queries) FailOutboxJob(ctx context.Context, arg FailOutboxJobParams) er
 }
 
 const getLatestSnapshotForNote = `-- name: GetLatestSnapshotForNote :one
-SELECT id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum, created_at
+SELECT id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum, created_at, last_applied_cursor
 FROM note_snapshots
 WHERE note_id = $1
   AND owner_id = $2
@@ -150,31 +150,34 @@ func (q *Queries) GetLatestSnapshotForNote(ctx context.Context, arg GetLatestSna
 		&i.SnapshotData,
 		&i.Checksum,
 		&i.CreatedAt,
+		&i.LastAppliedCursor,
 	)
 	return i, err
 }
 
 const insertSnapshot = `-- name: InsertSnapshot :one
 INSERT INTO note_snapshots (
-    id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum
+    id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum, last_applied_cursor
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 ON CONFLICT (note_id, version) DO UPDATE
 SET snapshot_data = EXCLUDED.snapshot_data,
-    checksum = EXCLUDED.checksum
-RETURNING id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum, created_at
+    checksum = EXCLUDED.checksum,
+    last_applied_cursor = EXCLUDED.last_applied_cursor
+RETURNING id, note_id, owner_id, version, snapshot_format, schema_version, snapshot_data, checksum, created_at, last_applied_cursor
 `
 
 type InsertSnapshotParams struct {
-	ID             pgtype.UUID `json:"id"`
-	NoteID         pgtype.UUID `json:"note_id"`
-	OwnerID        pgtype.UUID `json:"owner_id"`
-	Version        int64       `json:"version"`
-	SnapshotFormat string      `json:"snapshot_format"`
-	SchemaVersion  int32       `json:"schema_version"`
-	SnapshotData   []byte      `json:"snapshot_data"`
-	Checksum       string      `json:"checksum"`
+	ID                pgtype.UUID `json:"id"`
+	NoteID            pgtype.UUID `json:"note_id"`
+	OwnerID           pgtype.UUID `json:"owner_id"`
+	Version           int64       `json:"version"`
+	SnapshotFormat    string      `json:"snapshot_format"`
+	SchemaVersion     int32       `json:"schema_version"`
+	SnapshotData      []byte      `json:"snapshot_data"`
+	Checksum          string      `json:"checksum"`
+	LastAppliedCursor int64       `json:"last_applied_cursor"`
 }
 
 // Stores a snapshot and makes retries idempotent by note/version.
@@ -188,6 +191,7 @@ func (q *Queries) InsertSnapshot(ctx context.Context, arg InsertSnapshotParams) 
 		arg.SchemaVersion,
 		arg.SnapshotData,
 		arg.Checksum,
+		arg.LastAppliedCursor,
 	)
 	var i NoteSnapshot
 	err := row.Scan(
@@ -200,6 +204,7 @@ func (q *Queries) InsertSnapshot(ctx context.Context, arg InsertSnapshotParams) 
 		&i.SnapshotData,
 		&i.Checksum,
 		&i.CreatedAt,
+		&i.LastAppliedCursor,
 	)
 	return i, err
 }

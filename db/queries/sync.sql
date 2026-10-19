@@ -66,3 +66,9 @@ WHERE c.note_id = $1
       FROM note_snapshots
       WHERE note_id = $1
   ), 0);
+
+-- name: GetLastAppliedCursorForNote :one
+-- Returns the latest global change cursor represented by a note's current state.
+SELECT COALESCE(MAX(global_sequence), 0)::bigint
+FROM note_changes
+WHERE note_id = $1;

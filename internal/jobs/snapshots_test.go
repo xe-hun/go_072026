@@ -59,6 +59,7 @@ func TestSnapshotDocumentFromEntityIncludesDeletedBlocks(t *testing.T) {
 			NoteProperties: json.RawMessage(`{}`),
 			CurrentVersion: 2,
 		},
+		LastAppliedCursor: 42,
 		Blocks: []store.NoteBlock{
 			{
 				ID:              uuid.New(),
@@ -81,5 +82,8 @@ func TestSnapshotDocumentFromEntityIncludesDeletedBlocks(t *testing.T) {
 	}
 	if snapshot.Blocks[0].DeletedAt == nil {
 		t.Fatal("expected deleted block tombstone timestamp in snapshot")
+	}
+	if snapshot.LastAppliedCursor != 42 {
+		t.Fatalf("last applied cursor = %d, want 42", snapshot.LastAppliedCursor)
 	}
 }

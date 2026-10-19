@@ -85,3 +85,9 @@ func (s *Store) CountChangesSinceLastSnapshot(ctx context.Context, noteID uuid.U
 func (s *Store) SumChangeBytesSinceLastSnapshot(ctx context.Context, noteID uuid.UUID) (int64, error) {
 	return s.q.SumChangeBytesSinceLastSnapshot(ctx, pgUUID(noteID))
 }
+
+// GetLastAppliedCursorForNote returns the highest global sequence included in
+// the current state of a note. A note with no change history has cursor zero.
+func (s *Store) GetLastAppliedCursorForNote(ctx context.Context, noteID uuid.UUID) (int64, error) {
+	return s.q.GetLastAppliedCursorForNote(ctx, pgUUID(noteID))
+}

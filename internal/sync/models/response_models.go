@@ -43,15 +43,16 @@ func (s *NoteSnapshot) FromEntity(entity store.NoteDocument) error {
 		blocks = append(blocks, block)
 	}
 	*s = NoteSnapshot{
-		NoteID:         entity.Note.ID,
-		OwnerID:        entity.Note.OwnerID,
-		Title:          entity.Note.Title,
-		NoteProperties: store.NormalizeJSON(entity.Note.NoteProperties),
-		CurrentVersion: entity.Note.CurrentVersion,
-		CreatedAt:      entity.Note.CreatedAt,
-		UpdatedAt:      entity.Note.UpdatedAt,
-		DeletedAt:      store.TimePtr(entity.Note.DeletedAt),
-		Blocks:         blocks,
+		NoteID:            entity.Note.ID,
+		OwnerID:           entity.Note.OwnerID,
+		LastAppliedCursor: entity.LastAppliedCursor,
+		Title:             entity.Note.Title,
+		NoteProperties:    store.NormalizeJSON(entity.Note.NoteProperties),
+		CurrentVersion:    entity.Note.CurrentVersion,
+		CreatedAt:         entity.Note.CreatedAt,
+		UpdatedAt:         entity.Note.UpdatedAt,
+		DeletedAt:         store.TimePtr(entity.Note.DeletedAt),
+		Blocks:            blocks,
 	}
 	return nil
 }

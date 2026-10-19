@@ -58,6 +58,8 @@ type SnapshotResponse struct {
 	OwnerID uuid.UUID `json:"ownerId"`
 	// Version is the note version represented by SnapshotData.
 	Version int64 `json:"version"`
+	// LastAppliedCursor is the global change cursor represented by SnapshotData.
+	LastAppliedCursor int64 `json:"lastAppliedCursor"`
 	// SnapshotFormat identifies the JSON document format.
 	SnapshotFormat string `json:"snapshotFormat"`
 	// SchemaVersion allows future snapshot schema evolution.

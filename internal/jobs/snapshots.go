@@ -20,6 +20,8 @@ const SnapshotFormatV1 = "note-snapshot-v1"
 type SnapshotDocument struct {
 	// SchemaVersion allows future JSON shape migrations.
 	SchemaVersion int `json:"schemaVersion"`
+	// LastAppliedCursor lets a client resume sync after applying this document.
+	LastAppliedCursor int64 `json:"lastAppliedCursor"`
 	// Note stores note-level state.
 	Note SnapshotNote `json:"note"`
 	// Blocks stores ordered block state, including tombstones.
@@ -79,14 +81,15 @@ func CreateSnapshot(ctx context.Context, tx *store.Store, payload store.Snapshot
 		return store.NoteSnapshot{}, err
 	}
 	return tx.InsertSnapshot(ctx, store.NoteSnapshot{
-		ID:             uuid.New(),
-		NoteID:         doc.Note.ID,
-		OwnerID:        doc.Note.OwnerID,
-		Version:        doc.Note.CurrentVersion,
-		SnapshotFormat: SnapshotFormatV1,
-		SchemaVersion:  1,
-		SnapshotData:   encoded,
-		Checksum:       checksum,
+		ID:                uuid.New(),
+		NoteID:            doc.Note.ID,
+		OwnerID:           doc.Note.OwnerID,
+		Version:           doc.Note.CurrentVersion,
+		LastAppliedCursor: doc.LastAppliedCursor,
+		SnapshotFormat:    SnapshotFormatV1,
+		SchemaVersion:     1,
+		SnapshotData:      encoded,
+		Checksum:          checksum,
 	})
 }
 
@@ -110,7 +113,8 @@ func (s *SnapshotDocument) FromEntity(doc store.NoteDocument) error {
 	}
 
 	*s = SnapshotDocument{
-		SchemaVersion: 1,
+		SchemaVersion:     1,
+		LastAppliedCursor: doc.LastAppliedCursor,
 		Note: SnapshotNote{
 			ID:             doc.Note.ID,
 			Title:          doc.Note.Title,

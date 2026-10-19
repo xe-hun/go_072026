@@ -192,15 +192,16 @@ func (r *SnapshotResponse) FromEntity(entity store.NoteSnapshot) error {
 		return errors.New("snapshot entity must contain valid identifiers")
 	}
 	*r = SnapshotResponse{
-		ID:             entity.ID,
-		NoteID:         entity.NoteID,
-		OwnerID:        entity.OwnerID,
-		Version:        entity.Version,
-		SnapshotFormat: entity.SnapshotFormat,
-		SchemaVersion:  entity.SchemaVersion,
-		SnapshotData:   store.NormalizeJSON(entity.SnapshotData),
-		Checksum:       entity.Checksum,
-		CreatedAt:      entity.CreatedAt,
+		ID:                entity.ID,
+		NoteID:            entity.NoteID,
+		OwnerID:           entity.OwnerID,
+		Version:           entity.Version,
+		LastAppliedCursor: entity.LastAppliedCursor,
+		SnapshotFormat:    entity.SnapshotFormat,
+		SchemaVersion:     entity.SchemaVersion,
+		SnapshotData:      store.NormalizeJSON(entity.SnapshotData),
+		Checksum:          entity.Checksum,
+		CreatedAt:         entity.CreatedAt,
 	}
 	return nil
 }

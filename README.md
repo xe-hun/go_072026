@@ -109,7 +109,12 @@ include a per-note integer `sequence`; the server sorts by `noteId` and then
 `sequence`, applies each note as an atomic batch, and returns:
 
 - accepted note batches with the note ID and one authoritative server version
-- rejected note batches with the current server note snapshot
+- rejected note batches with the current server note snapshot and its
+  `lastAppliedCursor`
+
+Full-note sync responses and persisted snapshot responses also include
+`lastAppliedCursor`, the global change cursor represented by the returned full
+state. Clients can use it as the starting cursor after applying that state.
 
 The sync GET endpoint pulls remote changes after its query-string cursor. It
 returns `changes`, `hasMore`, and `nextCursor`; pulled changes expose

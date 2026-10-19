@@ -107,15 +107,16 @@ func fromDBChange(value db.NoteChange) NoteChange {
 // fromDBSnapshot maps generated snapshot rows.
 func fromDBSnapshot(value db.NoteSnapshot) NoteSnapshot {
 	return NoteSnapshot{
-		ID:             uuid.UUID(value.ID.Bytes),
-		NoteID:         uuid.UUID(value.NoteID.Bytes),
-		OwnerID:        uuid.UUID(value.OwnerID.Bytes),
-		Version:        value.Version,
-		SnapshotFormat: value.SnapshotFormat,
-		SchemaVersion:  value.SchemaVersion,
-		SnapshotData:   json.RawMessage(value.SnapshotData),
-		Checksum:       value.Checksum,
-		CreatedAt:      value.CreatedAt.Time,
+		ID:                uuid.UUID(value.ID.Bytes),
+		NoteID:            uuid.UUID(value.NoteID.Bytes),
+		OwnerID:           uuid.UUID(value.OwnerID.Bytes),
+		Version:           value.Version,
+		LastAppliedCursor: value.LastAppliedCursor,
+		SnapshotFormat:    value.SnapshotFormat,
+		SchemaVersion:     value.SchemaVersion,
+		SnapshotData:      json.RawMessage(value.SnapshotData),
+		Checksum:          value.Checksum,
+		CreatedAt:         value.CreatedAt.Time,
 	}
 }
 

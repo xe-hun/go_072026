@@ -58,15 +58,16 @@ type NoteChange struct {
 }
 
 type NoteSnapshot struct {
-	ID             pgtype.UUID        `json:"id"`
-	NoteID         pgtype.UUID        `json:"note_id"`
-	OwnerID        pgtype.UUID        `json:"owner_id"`
-	Version        int64              `json:"version"`
-	SnapshotFormat string             `json:"snapshot_format"`
-	SchemaVersion  int32              `json:"schema_version"`
-	SnapshotData   []byte             `json:"snapshot_data"`
-	Checksum       string             `json:"checksum"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ID                pgtype.UUID        `json:"id"`
+	NoteID            pgtype.UUID        `json:"note_id"`
+	OwnerID           pgtype.UUID        `json:"owner_id"`
+	Version           int64              `json:"version"`
+	SnapshotFormat    string             `json:"snapshot_format"`
+	SchemaVersion     int32              `json:"schema_version"`
+	SnapshotData      []byte             `json:"snapshot_data"`
+	Checksum          string             `json:"checksum"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LastAppliedCursor int64              `json:"last_applied_cursor"`
 }
 
 type OutboxJob struct {

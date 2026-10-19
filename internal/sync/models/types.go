@@ -121,15 +121,17 @@ type RejectedDTO struct {
 // NoteSnapshot contains the current note and block state returned once for a
 // rejected note batch so clients can resolve the conflict.
 type NoteSnapshot struct {
-	NoteID         uuid.UUID       `json:"noteId"`
-	OwnerID        uuid.UUID       `json:"ownerId"`
-	Title          string          `json:"title"`
-	NoteProperties json.RawMessage `json:"noteProperties"`
-	CurrentVersion int64           `json:"currentVersion"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
-	DeletedAt      *time.Time      `json:"deletedAt,omitempty"`
-	Blocks         []BlockSnapshot `json:"blocks"`
+	NoteID  uuid.UUID `json:"noteId"`
+	OwnerID uuid.UUID `json:"ownerId"`
+	// LastAppliedCursor is the global change cursor represented by this state.
+	LastAppliedCursor int64           `json:"lastAppliedCursor"`
+	Title             string          `json:"title"`
+	NoteProperties    json.RawMessage `json:"noteProperties"`
+	CurrentVersion    int64           `json:"currentVersion"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
+	DeletedAt         *time.Time      `json:"deletedAt,omitempty"`
+	Blocks            []BlockSnapshot `json:"blocks"`
 }
 
 // BlockSnapshot is one block inside a current note snapshot.

@@ -70,14 +70,15 @@ func (s *Store) FailOutboxJob(ctx context.Context, jobID int64, message string, 
 // (note_id, version), making retrying a snapshot job idempotent.
 func (s *Store) InsertSnapshot(ctx context.Context, snapshot NoteSnapshot) (NoteSnapshot, error) {
 	inserted, err := s.q.InsertSnapshot(ctx, db.InsertSnapshotParams{
-		ID:             pgUUID(snapshot.ID),
-		NoteID:         pgUUID(snapshot.NoteID),
-		OwnerID:        pgUUID(snapshot.OwnerID),
-		Version:        snapshot.Version,
-		SnapshotFormat: snapshot.SnapshotFormat,
-		SchemaVersion:  snapshot.SchemaVersion,
-		SnapshotData:   []byte(snapshot.SnapshotData),
-		Checksum:       snapshot.Checksum,
+		ID:                pgUUID(snapshot.ID),
+		NoteID:            pgUUID(snapshot.NoteID),
+		OwnerID:           pgUUID(snapshot.OwnerID),
+		Version:           snapshot.Version,
+		LastAppliedCursor: snapshot.LastAppliedCursor,
+		SnapshotFormat:    snapshot.SnapshotFormat,
+		SchemaVersion:     snapshot.SchemaVersion,
+		SnapshotData:      []byte(snapshot.SnapshotData),
+		Checksum:          snapshot.Checksum,
 	})
 	return fromDBSnapshot(inserted), err
 }

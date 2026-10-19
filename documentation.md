@@ -103,7 +103,8 @@ revocation timestamp, and last global cursor.
 
 `note_changes` is append-only. Every accepted operation creates exactly one change record with base/resulting versions and a global sequence.
 
-`note_snapshots` stores periodic full-note snapshots with checksums.
+`note_snapshots` stores periodic full-note snapshots with checksums and the
+`last_applied_cursor` global change sequence represented by each snapshot.
 
 `outbox_jobs` stores background jobs. The worker safely claims jobs using row locking and `SKIP LOCKED`.
 
@@ -274,12 +275,18 @@ The worker:
 1. Claims one available `outbox_jobs` row using `FOR UPDATE SKIP LOCKED`.
 2. Dispatches by `job_type`.
 3. For `create_snapshot`, loads note and blocks in a transaction.
-4. Builds a full snapshot document.
-5. Marshals the snapshot to JSON.
-6. Computes a SHA-256 checksum of the JSON.
-7. Inserts or updates the snapshot row for that note/version.
-8. Marks the job complete.
-9. On failure, stores the error and schedules a retry.
+4. Reads the highest `note_changes.global_sequence` for the note and carries it
+   as `lastAppliedCursor`.
+5. Builds a full snapshot document.
+6. Marshals the snapshot to JSON.
+7. Computes a SHA-256 checksum of the JSON.
+8. Inserts or updates the snapshot row for that note/version.
+9. Marks the job complete.
+10. On failure, stores the error and schedules a retry.
+
+Conflict and full-note sync snapshots expose the same `lastAppliedCursor` field
+so a client can resume change replay from the cursor represented by the full
+state.
 
 ## Error Format
 
