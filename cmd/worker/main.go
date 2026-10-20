@@ -11,6 +11,7 @@ import (
 
 	"notes-server/internal/config"
 	"notes-server/internal/jobs"
+	"notes-server/internal/storage"
 	"notes-server/internal/store"
 )
 
@@ -36,10 +37,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+	storageClient, err := storage.NewClient(cfg.SupabaseURL, cfg.SupabaseSecretKey, cfg.SupabaseStorageHTTPTimeout)
+	if err != nil {
+		logger.Error("initialize Supabase Storage client", "error", err)
+		os.Exit(1)
+	}
 
 	// An empty worker ID tells NewWorker to generate a stable process-local ID for
 	// lock ownership logs and outbox job claims.
 	worker := jobs.NewWorker(st, logger, "")
+	worker.SetCleaner(jobs.NewCleaner(st, storageClient, cfg.SupabaseStorageCleanupGrace, logger))
 	logger.Info("starting worker")
 	if err := worker.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("worker stopped with error", "error", err)

@@ -18,6 +18,10 @@ const (
 	CodeCursorExpired       = "CURSOR_EXPIRED"
 	CodePayloadTooLarge     = "PAYLOAD_TOO_LARGE"
 	CodeRateLimited         = "RATE_LIMITED"
+	CodeConflict            = "CONFLICT"
+	CodeUploadNotReady      = "UPLOAD_NOT_READY"
+	CodeUploadInvalid       = "UPLOAD_INVALID"
+	CodeStorageUnavailable  = "STORAGE_UNAVAILABLE"
 	CodeInternalError       = "INTERNAL_ERROR"
 )
 

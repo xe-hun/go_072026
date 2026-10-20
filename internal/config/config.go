@@ -55,6 +55,27 @@ type Config struct {
 	MaxCompressedRequestBytes int64
 	// MaxDecompressedRequestBytes limits the expanded gzip body.
 	MaxDecompressedRequestBytes int64
+
+	// SupabaseURL is the project URL used to reach Supabase Storage.
+	SupabaseURL string
+	// SupabaseSecretKey is used only by trusted backend requests to Storage.
+	SupabaseSecretKey string
+	// SupabaseStorageBucket is the private bucket used for note attachments.
+	SupabaseStorageBucket string
+	// SupabaseStorageMaxFileSize is the application-side upload limit.
+	SupabaseStorageMaxFileSize int64
+	// SupabaseStorageAllowedMimeTypes is the application-side MIME allowlist.
+	SupabaseStorageAllowedMimeTypes []string
+	// SupabaseStorageMaxPendingUploads limits active upload authorizations per user.
+	SupabaseStorageMaxPendingUploads int
+	// SupabaseStorageUploadTTL is the documented lifetime of a signed upload URL.
+	SupabaseStorageUploadTTL time.Duration
+	// SupabaseStorageDownloadTTL controls the lifetime of signed download URLs.
+	SupabaseStorageDownloadTTL time.Duration
+	// SupabaseStorageCleanupGrace delays abandoned-upload cleanup after expiry.
+	SupabaseStorageCleanupGrace time.Duration
+	// SupabaseStorageHTTPTimeout bounds one Storage API request.
+	SupabaseStorageHTTPTimeout time.Duration
 }
 
 // Load reads .env for local development, reads process environment variables,
@@ -65,24 +86,34 @@ func Load() (Config, error) {
 	_ = loadDotEnv(".env")
 
 	cfg := Config{
-		AppEnv:                      get("APP_ENV", "development"),
-		Port:                        get("PORT", "8080"),
-		WebSocketPort:               get("WEBSOCKET_PORT", "8082"),
-		LogLevel:                    get("LOG_LEVEL", "info"),
-		DatabaseURL:                 os.Getenv("DATABASE_URL"),
-		JWTIssuer:                   os.Getenv("JWT_ISSUER"),
-		JWTAudience:                 os.Getenv("JWT_AUDIENCE"),
-		JWTJWKSURL:                  os.Getenv("JWT_JWKS_URL"),
-		MaxDBConnections:            int32(getInt("MAX_DB_CONNECTIONS", 10)),
-		SyncMaxOperations:           getInt("SYNC_MAX_OPERATIONS", 500),
-		SyncDefaultPullLimit:        getInt("SYNC_DEFAULT_PULL_LIMIT", 500),
-		SyncMaxPullLimit:            getInt("SYNC_MAX_PULL_LIMIT", 1000),
-		SnapshotChangeThreshold:     int64(getInt("SNAPSHOT_CHANGE_THRESHOLD", 100)),
-		SnapshotByteThreshold:       int64(getInt("SNAPSHOT_BYTE_THRESHOLD", 524288)),
-		ChangeRetentionDays:         getInt("CHANGE_RETENTION_DAYS", 30),
-		RequestTimeout:              time.Duration(getInt("REQUEST_TIMEOUT_SECONDS", 30)) * time.Second,
-		MaxCompressedRequestBytes:   int64(getInt("MAX_COMPRESSED_REQUEST_BYTES", 2*1024*1024)),
-		MaxDecompressedRequestBytes: int64(getInt("MAX_DECOMPRESSED_REQUEST_BYTES", 10*1024*1024)),
+		AppEnv:                           get("APP_ENV", "development"),
+		Port:                             get("PORT", "8080"),
+		WebSocketPort:                    get("WEBSOCKET_PORT", "8082"),
+		LogLevel:                         get("LOG_LEVEL", "info"),
+		DatabaseURL:                      os.Getenv("DATABASE_URL"),
+		JWTIssuer:                        os.Getenv("JWT_ISSUER"),
+		JWTAudience:                      os.Getenv("JWT_AUDIENCE"),
+		JWTJWKSURL:                       os.Getenv("JWT_JWKS_URL"),
+		MaxDBConnections:                 int32(getInt("MAX_DB_CONNECTIONS", 10)),
+		SyncMaxOperations:                getInt("SYNC_MAX_OPERATIONS", 500),
+		SyncDefaultPullLimit:             getInt("SYNC_DEFAULT_PULL_LIMIT", 500),
+		SyncMaxPullLimit:                 getInt("SYNC_MAX_PULL_LIMIT", 1000),
+		SnapshotChangeThreshold:          int64(getInt("SNAPSHOT_CHANGE_THRESHOLD", 100)),
+		SnapshotByteThreshold:            int64(getInt("SNAPSHOT_BYTE_THRESHOLD", 524288)),
+		ChangeRetentionDays:              getInt("CHANGE_RETENTION_DAYS", 30),
+		RequestTimeout:                   time.Duration(getInt("REQUEST_TIMEOUT_SECONDS", 30)) * time.Second,
+		MaxCompressedRequestBytes:        int64(getInt("MAX_COMPRESSED_REQUEST_BYTES", 2*1024*1024)),
+		MaxDecompressedRequestBytes:      int64(getInt("MAX_DECOMPRESSED_REQUEST_BYTES", 10*1024*1024)),
+		SupabaseURL:                      os.Getenv("SUPABASE_URL"),
+		SupabaseSecretKey:                os.Getenv("SUPABASE_SECRET_KEY"),
+		SupabaseStorageBucket:            get("SUPABASE_STORAGE_BUCKET", "documents"),
+		SupabaseStorageMaxFileSize:       int64(getInt("SUPABASE_STORAGE_MAX_FILE_SIZE", 10*1024*1024)),
+		SupabaseStorageAllowedMimeTypes:  getCSV("SUPABASE_STORAGE_ALLOWED_MIME_TYPES", "application/pdf,image/jpeg,image/png"),
+		SupabaseStorageMaxPendingUploads: getInt("SUPABASE_STORAGE_MAX_PENDING_UPLOADS", 20),
+		SupabaseStorageUploadTTL:         time.Duration(getInt("SUPABASE_STORAGE_UPLOAD_TTL_SECONDS", 7200)) * time.Second,
+		SupabaseStorageDownloadTTL:       time.Duration(getInt("SUPABASE_STORAGE_DOWNLOAD_TTL_SECONDS", 600)) * time.Second,
+		SupabaseStorageCleanupGrace:      time.Duration(getInt("SUPABASE_STORAGE_CLEANUP_GRACE_SECONDS", 3600)) * time.Second,
+		SupabaseStorageHTTPTimeout:       time.Duration(getInt("SUPABASE_STORAGE_HTTP_TIMEOUT_SECONDS", 15)) * time.Second,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -96,10 +127,13 @@ func Load() (Config, error) {
 func (c Config) Validate() error {
 	var missing []string
 	required := map[string]string{
-		"DATABASE_URL": c.DatabaseURL,
-		"JWT_ISSUER":   c.JWTIssuer,
-		"JWT_AUDIENCE": c.JWTAudience,
-		"JWT_JWKS_URL": c.JWTJWKSURL,
+		"DATABASE_URL":            c.DatabaseURL,
+		"JWT_ISSUER":              c.JWTIssuer,
+		"JWT_AUDIENCE":            c.JWTAudience,
+		"JWT_JWKS_URL":            c.JWTJWKSURL,
+		"SUPABASE_URL":            c.SupabaseURL,
+		"SUPABASE_SECRET_KEY":     c.SupabaseSecretKey,
+		"SUPABASE_STORAGE_BUCKET": c.SupabaseStorageBucket,
 	}
 	for key, value := range required {
 		if strings.TrimSpace(value) == "" {
@@ -124,6 +158,27 @@ func (c Config) Validate() error {
 	if c.MaxCompressedRequestBytes <= 0 || c.MaxDecompressedRequestBytes <= 0 {
 		return errors.New("request byte limits must be greater than zero")
 	}
+	if c.SupabaseStorageMaxFileSize <= 0 {
+		return errors.New("SUPABASE_STORAGE_MAX_FILE_SIZE must be greater than zero")
+	}
+	if strings.ContainsAny(c.SupabaseStorageBucket, "/\\") {
+		return errors.New("SUPABASE_STORAGE_BUCKET must be a single bucket name")
+	}
+	if len(c.SupabaseStorageAllowedMimeTypes) == 0 {
+		return errors.New("SUPABASE_STORAGE_ALLOWED_MIME_TYPES must contain at least one MIME type")
+	}
+	if c.SupabaseStorageMaxPendingUploads <= 0 {
+		return errors.New("SUPABASE_STORAGE_MAX_PENDING_UPLOADS must be greater than zero")
+	}
+	if c.SupabaseStorageUploadTTL <= 0 || c.SupabaseStorageUploadTTL > 2*time.Hour {
+		return errors.New("SUPABASE_STORAGE_UPLOAD_TTL_SECONDS must be between 1 and 7200")
+	}
+	if c.SupabaseStorageDownloadTTL <= 0 {
+		return errors.New("SUPABASE_STORAGE_DOWNLOAD_TTL_SECONDS must be greater than zero")
+	}
+	if c.SupabaseStorageCleanupGrace <= 0 || c.SupabaseStorageHTTPTimeout <= 0 {
+		return errors.New("Supabase cleanup grace and HTTP timeout must be greater than zero")
+	}
 	return nil
 }
 
@@ -147,6 +202,19 @@ func getInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func getCSV(key, fallback string) []string {
+	value := get(key, fallback)
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+	return result
 }
 
 // loadDotEnv is a small development-only .env loader. It intentionally supports

@@ -39,6 +39,12 @@ Open `.env` and fill in the JWT settings:
 JWT_ISSUER=
 JWT_AUDIENCE=
 JWT_JWKS_URL=
+SUPABASE_URL=
+SUPABASE_SECRET_KEY=
+SUPABASE_STORAGE_BUCKET=documents
+SUPABASE_STORAGE_MAX_FILE_SIZE=10485760
+SUPABASE_STORAGE_ALLOWED_MIME_TYPES=application/pdf,image/jpeg,image/png
+SUPABASE_STORAGE_MAX_PENDING_UPLOADS=20
 ```
 
 For Supabase Auth these values normally come from the project auth settings. The API will fail fast on startup if any required value is missing.
@@ -104,6 +110,14 @@ Run the golang-migrate migrations:
 make migrate-up
 ```
 
+Before starting the API, create a private Storage bucket named by
+`SUPABASE_STORAGE_BUCKET` in the Supabase dashboard. Set its file-size limit
+and allowed MIME types to match the application environment values. Never put
+the server `SUPABASE_SECRET_KEY` in frontend configuration.
+If the browser is hosted on another origin, configure the bucket/deployment
+CORS policy to allow that origin's `PUT` requests and the headers used by the
+direct upload.
+
 This creates:
 
 - `categories`
@@ -113,6 +127,7 @@ This creates:
 - `note_changes`
 - `note_snapshots`
 - `outbox_jobs`
+- `file_uploads`
 
 If an existing empty database already has this initial schema from the previous
 Goose migration, run `make migrate-force VERSION=1` to mark version `1` as
@@ -361,6 +376,24 @@ Run integration tests when a test database is available:
 set TEST_DATABASE_URL=postgres://notes_user:notes_password@localhost:5432/notes_db?sslmode=disable
 make test-integration
 ```
+
+### Upload example
+
+After creating a note and block, initiate an upload with the authenticated
+token:
+
+```sh
+curl -X POST http://localhost:8080/v1/uploads/initiate \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"noteId":"<NOTE_ID>","blockId":"<BLOCK_ID>","filename":"document.pdf","contentType":"application/pdf","size":2457600}'
+```
+
+Use the returned `signedUrl` and `token` for the direct Supabase upload. Do
+not send file bytes through the Go API. After Supabase returns success, call
+`POST /v1/uploads/<UPLOAD_ID>/complete`; the server checks object size and
+stored MIME metadata. If completion times out, retry it or call
+`GET /v1/uploads/<UPLOAD_ID>` rather than immediately creating another object.
 
 PowerShell:
 

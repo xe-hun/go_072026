@@ -37,6 +37,7 @@ const (
 
 	// Note properties.
 	RequestKeyNoteID          = "noteId"
+	RequestKeyUploadID        = "uploadId"
 	RequestKeySequence        = "sequence"
 	RequestKeyTitle           = "title"
 	RequestKeyBaseNoteVersion = "baseNoteVersion"

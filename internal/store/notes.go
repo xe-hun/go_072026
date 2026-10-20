@@ -59,6 +59,26 @@ func (s *Store) GetBlockForNoteForUpdate(ctx context.Context, blockID, noteID uu
 	return fromDBBlock(block), mapNoRows(err)
 }
 
+// ValidateUploadTarget checks both ownership and the note/block relationship.
+// Soft-deleted notes and blocks are not valid upload targets.
+func (s *Store) ValidateUploadTarget(ctx context.Context, noteID, blockID, ownerID uuid.UUID) error {
+	note, err := s.GetNoteForOwner(ctx, noteID, ownerID)
+	if err != nil {
+		return err
+	}
+	if note.DeletedAt.Valid {
+		return ErrNotFound
+	}
+	block, err := s.GetBlockForNoteForUpdate(ctx, blockID, noteID)
+	if err != nil {
+		return err
+	}
+	if block.DeletedAt.Valid {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListBlocksForNote returns all blocks for a note in stable position order,
 // including tombstones.
 func (s *Store) ListBlocksForNote(ctx context.Context, noteID uuid.UUID) ([]NoteBlock, error) {

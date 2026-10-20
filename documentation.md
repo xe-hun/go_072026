@@ -65,6 +65,28 @@ synchronization.
 
 `internal/jobs` contains the outbox worker and snapshot creation logic.
 
+`internal/storage` is the trusted Supabase Storage HTTP client. It creates
+signed upload/download capabilities, reads object metadata, and deletes stored
+objects without exposing the service credential.
+
+`internal/uploads` owns upload authorization, note/block ownership checks,
+metadata validation, and lifecycle transitions. File bytes never pass through
+the Go API.
+
+### Supabase Storage configuration
+
+Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_STORAGE_BUCKET` in the
+API and worker environments. The bucket must be private. Configure its file
+size limit and allowed MIME types to match `SUPABASE_STORAGE_MAX_FILE_SIZE`
+and `SUPABASE_STORAGE_ALLOWED_MIME_TYPES`; the API enforces the same limits
+before requesting an authorization. `SUPABASE_STORAGE_DOWNLOAD_TTL_SECONDS`
+controls short-lived download links, while upload authorizations use the
+documented two-hour Supabase lifetime by default. The service key is trusted
+server configuration and must never be included in frontend configuration.
+For browser clients hosted on another origin, configure Storage/deployment
+CORS to allow that origin's direct `PUT` requests and the required content
+headers.
+
 `db/migrations` contains golang-migrate migrations.
 
 `db/queries` contains sqlc query definitions.
@@ -108,6 +130,11 @@ revocation timestamp, and last global cursor.
 
 `outbox_jobs` stores background jobs. The worker safely claims jobs using row locking and `SKIP LOCKED`.
 
+`file_uploads` stores the application record for each note/block attachment.
+Each row is linked to the authenticated owner, note, and block, and stores the
+private bucket/path rather than a temporary signed URL or token. The lifecycle
+is `PENDING`, `COMPLETED`, `FAILED`, `EXPIRED`, `CANCELLED`, or `DELETED`.
+
 ## API Flow
 
 The API server starts in `cmd/api/main.go`:
@@ -134,6 +161,57 @@ Authenticated routes:
 - `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
+- `POST /v1/uploads/initiate`
+- `POST /v1/uploads/{uploadId}/complete`
+- `GET /v1/uploads/{uploadId}`
+- `POST /v1/uploads/{uploadId}/download-url`
+- `DELETE /v1/uploads/{uploadId}`
+
+### Upload lifecycle
+
+`POST /v1/uploads/initiate` accepts `noteId`, `blockId`, `filename`,
+`contentType`, and positive `size`. The service authenticates the owner,
+checks that the block belongs to the note, validates the configured MIME and
+size limits, writes a pending row, and requests a Supabase signed upload URL.
+The response contains `uploadId`, `bucket`, `path`, `signedUrl`, `token`, and
+`expiresAt`. The token is transient and is not stored or logged.
+
+The browser uploads directly to the private bucket using the signed URL. It
+then calls `POST /v1/uploads/{uploadId}/complete` without resubmitting the
+path. The API retrieves the stored path from PostgreSQL, asks Supabase for
+object info, compares the actual size and MIME type to the declared metadata,
+and uses a conditional update so concurrent completion requests are safe.
+Already completed uploads return their existing result.
+
+For a plain browser client, the direct transfer is equivalent to:
+
+```js
+await fetch(initiation.signedUrl, {
+  method: "PUT",
+  headers: { "content-type": initiation.contentType },
+  body: file,
+});
+await fetch(`/v1/uploads/${initiation.uploadId}/complete`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+```
+
+The browser should use the declared content type, avoid storing the signed
+URL longer than needed, and retry completion/status rather than starting a
+second upload after a lost response.
+
+`GET /v1/uploads/{uploadId}` exposes lifecycle metadata without credentials.
+`POST /v1/uploads/{uploadId}/download-url` issues a short-lived private signed
+download URL only for completed, authorized files. `DELETE` removes the
+trusted stored object path and then marks the row `DELETED`; missing objects
+are treated as an idempotent deletion.
+
+The worker reconciles pending rows after `expiresAt` plus
+`SUPABASE_STORAGE_CLEANUP_GRACE_SECONDS`. It verifies any late object before
+finalizing it, deletes mismatched objects, and marks missing or invalid rows
+expired. The grace period does not revoke a previously issued Supabase token;
+it only reduces cleanup races.
 
 The WebSocket server exposes:
 

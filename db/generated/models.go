@@ -17,6 +17,26 @@ type Category struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type FileUpload struct {
+	ID                  pgtype.UUID        `json:"id"`
+	NoteID              pgtype.UUID        `json:"note_id"`
+	OwnerID             pgtype.UUID        `json:"owner_id"`
+	BlockID             pgtype.UUID        `json:"block_id"`
+	OriginalFilename    string             `json:"original_filename"`
+	StorageBucket       string             `json:"storage_bucket"`
+	StoragePath         string             `json:"storage_path"`
+	ContentType         string             `json:"content_type"`
+	ExpectedSize        int64              `json:"expected_size"`
+	ActualSize          pgtype.Int8        `json:"actual_size"`
+	VerifiedContentType pgtype.Text        `json:"verified_content_type"`
+	Status              string             `json:"status"`
+	ErrorMessage        pgtype.Text        `json:"error_message"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Note struct {
 	ID             pgtype.UUID        `json:"id"`
 	OwnerID        pgtype.UUID        `json:"owner_id"`

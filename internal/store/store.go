@@ -151,6 +151,28 @@ type OutboxJob struct {
 	CreatedAt time.Time
 }
 
+// FileUpload mirrors a file_uploads row and never contains a signed URL or
+// upload token. Those values are intentionally transient API response data.
+type FileUpload struct {
+	ID                  uuid.UUID
+	NoteID              uuid.UUID
+	OwnerID             uuid.UUID
+	BlockID             uuid.UUID
+	OriginalFilename    string
+	StorageBucket       string
+	StoragePath         string
+	ContentType         string
+	ExpectedSize        int64
+	ActualSize          pgtype.Int8
+	VerifiedContentType pgtype.Text
+	Status              string
+	ErrorMessage        pgtype.Text
+	ExpiresAt           time.Time
+	CompletedAt         pgtype.Timestamptz
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
 // CreateDeviceParams is the store input for inserting a sync device.
 type CreateDeviceParams struct {
 	// ID is supplied by the client.

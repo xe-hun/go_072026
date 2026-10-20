@@ -135,3 +135,25 @@ func fromDBOutboxJob(value db.OutboxJob) OutboxJob {
 		CreatedAt:   value.CreatedAt.Time,
 	}
 }
+
+func fromDBFileUpload(value db.FileUpload) FileUpload {
+	return FileUpload{
+		ID:                  uuid.UUID(value.ID.Bytes),
+		NoteID:              uuid.UUID(value.NoteID.Bytes),
+		OwnerID:             uuid.UUID(value.OwnerID.Bytes),
+		BlockID:             uuid.UUID(value.BlockID.Bytes),
+		OriginalFilename:    value.OriginalFilename,
+		StorageBucket:       value.StorageBucket,
+		StoragePath:         value.StoragePath,
+		ContentType:         value.ContentType,
+		ExpectedSize:        value.ExpectedSize,
+		ActualSize:          value.ActualSize,
+		VerifiedContentType: value.VerifiedContentType,
+		Status:              value.Status,
+		ErrorMessage:        value.ErrorMessage,
+		ExpiresAt:           value.ExpiresAt.Time,
+		CompletedAt:         value.CompletedAt,
+		CreatedAt:           value.CreatedAt.Time,
+		UpdatedAt:           value.UpdatedAt.Time,
+	}
+}

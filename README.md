@@ -18,7 +18,9 @@ Backend service for an offline-first mobile notes app. It implements JWT-authent
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Fill in `JWT_ISSUER`, `JWT_AUDIENCE`, and `JWT_JWKS_URL`.
+2. Fill in `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_JWKS_URL`, `SUPABASE_URL`, and
+   `SUPABASE_SECRET_KEY`. Create the configured private Supabase Storage bucket
+   before starting the API.
 3. Start PostgreSQL:
 
 ```sh
@@ -96,8 +98,41 @@ worker in `.vscode/launch.json`.
 - `GET /v1/realtime?deviceId=...` (WebSocket server, port `8082` by default)
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
+- `POST /v1/uploads/initiate`
+- `POST /v1/uploads/{uploadId}/complete`
+- `GET /v1/uploads/{uploadId}`
+- `POST /v1/uploads/{uploadId}/download-url`
+- `DELETE /v1/uploads/{uploadId}`
 
 All `/v1` endpoints require `Authorization: Bearer <JWT>`.
+
+## Direct File Uploads
+
+Uploads are associated with an authenticated user's note and block. The API
+validates ownership and metadata, creates a `PENDING` record, and returns a
+temporary Supabase signed upload URL and token. The client sends the bytes
+directly to Supabase, then calls completion; the API independently reads
+Storage metadata and marks the record `COMPLETED` only when size and MIME type
+match.
+
+Required Supabase settings are documented in `.env.example`. The configured
+bucket must be private, and its file-size and allowed-MIME settings should
+match the application values. The server-side `SUPABASE_SECRET_KEY` is never
+sent to clients.
+
+Example lifecycle:
+
+```text
+POST /v1/uploads/initiate
+  -> PUT signedUrl?token=... (browser directly to Supabase)
+  -> POST /v1/uploads/{uploadId}/complete
+  -> POST /v1/uploads/{uploadId}/download-url when the file is needed
+```
+
+The signed upload URL is temporary and must not be persisted by the client.
+Completion can be retried safely; if the completion response is lost, query
+the status endpoint before initiating another upload. The worker reconciles
+pending records after their expiry plus the configured cleanup grace period.
 
 ## Sync Notes
 

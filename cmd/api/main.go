@@ -22,9 +22,12 @@ import (
 	"notes-server/internal/notes"
 	notehandlers "notes-server/internal/notes/handlers"
 	"notes-server/internal/realtime"
+	"notes-server/internal/storage"
 	"notes-server/internal/store"
 	synchandlers "notes-server/internal/sync/handlers"
 	syncservices "notes-server/internal/sync/services"
+	"notes-server/internal/uploads"
+	uploadhandlers "notes-server/internal/uploads/handlers"
 )
 
 func main() {
@@ -56,10 +59,15 @@ func main() {
 		logger.Error("initialize jwt verifier", "error", err)
 		os.Exit(1)
 	}
+	storageClient, err := storage.NewClient(cfg.SupabaseURL, cfg.SupabaseSecretKey, cfg.SupabaseStorageHTTPTimeout)
+	if err != nil {
+		logger.Error("initialize Supabase Storage client", "error", err)
+		os.Exit(1)
+	}
 
 	eventBus := realtime.NewPostgresEventBus(st.Pool(), logger)
 
-	router := buildRouter(cfg, logger, st, verifier, eventBus)
+	router := buildRouter(cfg, logger, st, verifier, eventBus, storageClient)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
@@ -106,7 +114,7 @@ func main() {
 	}
 }
 
-func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier, eventBus realtime.EventBus) http.Handler {
+func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifier *auth.Verifier, eventBus realtime.EventBus, storageClient storage.Storage) http.Handler {
 	// Services contain business rules; handlers only decode/encode HTTP data.
 	// This mirrors the intended flow: handler -> service -> store/sqlc.
 	deviceService := devices.NewService(st)
@@ -115,6 +123,8 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 	noteHandler := notehandlers.New(noteService)
 	syncService := syncservices.NewService(st, cfg, logger, eventBus)
 	syncHandler := synchandlers.New(syncService)
+	uploadService := uploads.NewService(st, storageClient, cfg)
+	uploadHandler := uploadhandlers.New(uploadService)
 	r := chi.NewRouter()
 	// Global middleware applies to both public and authenticated routes. Request
 	// ID is first so later middleware and error responses can include it.
@@ -155,6 +165,7 @@ func buildRouter(cfg config.Config, logger *slog.Logger, st *store.Store, verifi
 		r.Get("/sync/updates-available", syncHandler.UpdatesAvailable)
 		r.Get("/sync", syncHandler.Pull)
 		r.Mount("/notes", noteHandler.Routes())
+		r.Mount("/uploads", uploadHandler.Routes())
 	})
 	return r
 }

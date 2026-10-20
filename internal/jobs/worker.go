@@ -25,6 +25,15 @@ type Worker struct {
 	pollInterval time.Duration
 	// lockTimeout lets another worker reclaim a stale locked job.
 	lockTimeout time.Duration
+	// cleaner reconciles expired direct-to-Storage uploads.
+	cleaner *Cleaner
+	// lastCleanup records the last cleanup attempt in this process.
+	lastCleanup time.Time
+}
+
+// SetCleaner attaches periodic abandoned-upload reconciliation to the worker.
+func (w *Worker) SetCleaner(cleaner *Cleaner) {
+	w.cleaner = cleaner
 }
 
 // NewWorker constructs a worker and generates an ID when one is not supplied.
@@ -61,6 +70,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.logger.ErrorContext(ctx, "worker iteration failed", "error", err)
 		}
 		if worked {
+			w.maybeCleanup(ctx)
 			continue
 		}
 
@@ -68,7 +78,18 @@ func (w *Worker) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			w.maybeCleanup(ctx)
 		}
+	}
+}
+
+func (w *Worker) maybeCleanup(ctx context.Context) {
+	if w.cleaner == nil || !w.lastCleanup.IsZero() && time.Since(w.lastCleanup) < 5*time.Minute {
+		return
+	}
+	w.lastCleanup = time.Now()
+	if err := w.cleaner.RunOnce(ctx); err != nil {
+		w.logger.ErrorContext(ctx, "upload cleanup failed", "error", err)
 	}
 }
 
