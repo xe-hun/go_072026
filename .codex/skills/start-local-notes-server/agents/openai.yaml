@@ -1,0 +1,4 @@
+interface:
+  display_name: "Start Local Notes Server"
+  short_description: "Start the local Notes Sync backend"
+  default_prompt: "Use $start-local-notes-server to start the local Notes Sync backend environment."
