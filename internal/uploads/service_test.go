@@ -258,7 +258,7 @@ func TestInitiateRejectsUnsafeOrUnsupportedMetadata(t *testing.T) {
 	}
 }
 
-func TestDownloadURLsReturnsOnlyCompletedUploadsFromOtherDevices(t *testing.T) {
+func TestDownloadURLsSkipsPendingAndOwnDeviceUploads(t *testing.T) {
 	repository := newFakeRepository()
 	storageClient := &fakeStorage{
 		signed: storage.SignedUpload{URL: "https://storage.test/upload", Token: "secret-token"},
@@ -273,18 +273,22 @@ func TestDownloadURLsReturnsOnlyCompletedUploadsFromOtherDevices(t *testing.T) {
 	if _, err := service.Complete(context.Background(), ownerID, phoneUpload.UploadID); err != nil {
 		t.Fatal(err)
 	}
-	laptopUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "laptop", Filename: "laptop.pdf", ContentType: "application/pdf", Size: 12})
+	pendingUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "laptop", Filename: "pending.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Complete(context.Background(), ownerID, laptopUpload.UploadID); err != nil {
+	readyUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "tablet", Filename: "ready.pdf", ContentType: "application/pdf", Size: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Complete(context.Background(), ownerID, readyUpload.UploadID); err != nil {
 		t.Fatal(err)
 	}
 	response, err := service.DownloadURLs(context.Background(), ownerID, "phone", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Links) != 1 || response.Links[0].UploadID != laptopUpload.UploadID || response.NextCursor != laptopUpload.Cursor {
+	if len(response.Links) != 1 || response.Links[0].UploadID != readyUpload.UploadID || response.NextCursor != readyUpload.Cursor || pendingUpload.Cursor >= readyUpload.Cursor {
 		t.Fatalf("unexpected download feed response: %+v", response)
 	}
 }

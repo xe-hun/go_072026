@@ -140,9 +140,9 @@ and records the registered device that initiated it. To receive completed files
 created after a saved cursor by other devices, call
 `GET /v1/uploads/download-links?cursor=<cursor>&deviceId=<deviceId>`. The
 response contains signed links and `nextCursor`; save that cursor only after
-processing the returned links. The endpoint consumes terminal rows and the
-requesting device's rows without returning links for them. It does not advance
-past a still-pending upload from another device.
+processing the returned links. The endpoint consumes terminal rows, pending
+rows, problematic rows, and the requesting device's rows without returning
+links for them, so one unavailable upload does not block ready files.
 
 ## Sync Notes
 

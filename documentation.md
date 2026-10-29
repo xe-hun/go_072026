@@ -216,9 +216,9 @@ are treated as an idempotent deletion.
 signed download URLs for completed uploads owned by the authenticated user
 whose upload cursor is after the supplied cursor, excluding uploads initiated
 by the supplied device. It advances through terminal rows and the requesting
-device's rows without returning links for them. A pending upload from another
-device stops cursor advancement until that row completes or becomes terminal,
-so clients cannot skip a file that will become downloadable later. The response
+device's rows without returning links for them. Pending or problematic uploads
+are skipped so ready files can still be returned; clients that need to retry a
+skipped upload can use its individual status/download endpoints. The response
 shape is `{ "links": [...], "nextCursor": 123 }`; clients should persist
 `nextCursor` after processing the links.
 

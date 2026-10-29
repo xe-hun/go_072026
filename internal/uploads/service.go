@@ -229,10 +229,9 @@ func (s *Service) DownloadURL(ctx context.Context, ownerID, uploadID uuid.UUID) 
 	}, nil
 }
 
-// DownloadURLs returns completed upload links after cursor in feed order. Rows
-// from the requesting device are consumed but never returned. A pending row
-// from another device stops cursor advancement so a later completion cannot be
-// skipped by the client.
+// DownloadURLs returns ready upload links after cursor in feed order. Rows
+// from the requesting device and uploads that cannot produce a link are
+// consumed but never returned so one problematic upload cannot block the feed.
 func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID string, cursor int64) (DownloadLinksResponse, error) {
 	if err := validateCursor(cursor); err != nil {
 		return DownloadLinksResponse{}, err
@@ -249,26 +248,19 @@ func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID 
 		NextCursor: cursor,
 	}
 	for _, entity := range entities {
+		response.NextCursor = entity.Cursor
 		if entity.DeviceID == deviceID {
-			response.NextCursor = entity.Cursor
 			continue
 		}
-		if entity.Status == StatusPending {
-			break
-		}
 		if entity.Status != StatusCompleted {
-			response.NextCursor = entity.Cursor
 			continue
 		}
 		if err := s.repository.ValidateUploadTarget(ctx, entity.NoteID, entity.BlockID, ownerID); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return DownloadLinksResponse{}, httpapi.Forbidden("You do not have access to this note or block.")
-			}
-			return DownloadLinksResponse{}, err
+			continue
 		}
 		urlValue, err := s.storage.CreateSignedDownloadURL(ctx, entity.StorageBucket, entity.StoragePath, int(s.downloadTTL/time.Second))
 		if err != nil {
-			return DownloadLinksResponse{}, storageAPIError(err)
+			continue
 		}
 		response.Links = append(response.Links, DownloadURLResponse{
 			Cursor:    entity.Cursor,
@@ -276,7 +268,6 @@ func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID 
 			SignedURL: urlValue,
 			ExpiresAt: time.Now().UTC().Add(s.downloadTTL),
 		})
-		response.NextCursor = entity.Cursor
 	}
 	return response, nil
 }
