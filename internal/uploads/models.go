@@ -22,6 +22,7 @@ const (
 type InitiateRequest struct {
 	NoteID      uuid.UUID `json:"noteId"`
 	BlockID     uuid.UUID `json:"blockId"`
+	DeviceID    string    `json:"deviceId"`
 	Filename    string    `json:"filename"`
 	ContentType string    `json:"contentType"`
 	Size        int64     `json:"size"`
@@ -31,6 +32,7 @@ type InitiateRequest struct {
 // capability. The token is never stored in PostgreSQL.
 type InitiateResponse struct {
 	UploadID    uuid.UUID `json:"uploadId"`
+	Cursor      int64     `json:"cursor"`
 	Status      string    `json:"status"`
 	Bucket      string    `json:"bucket"`
 	Path        string    `json:"path"`
@@ -51,6 +53,7 @@ type FileMetadata struct {
 // no upload token, signed URL, secret, or internal error detail.
 type Response struct {
 	UploadID            uuid.UUID    `json:"uploadId"`
+	Cursor              int64        `json:"cursor"`
 	NoteID              uuid.UUID    `json:"noteId"`
 	BlockID             uuid.UUID    `json:"blockId"`
 	Status              string       `json:"status"`
@@ -69,14 +72,23 @@ type Response struct {
 // DownloadURLResponse contains a short-lived bearer capability and no storage
 // credentials.
 type DownloadURLResponse struct {
+	Cursor    int64     `json:"cursor"`
 	UploadID  uuid.UUID `json:"uploadId"`
 	SignedURL string    `json:"signedUrl"`
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+// DownloadLinksResponse contains the completed upload links after the supplied
+// cursor and the cursor the client should use for its next request.
+type DownloadLinksResponse struct {
+	Links      []DownloadURLResponse `json:"links"`
+	NextCursor int64                 `json:"nextCursor"`
+}
+
 func responseFromEntity(upload store.FileUpload) Response {
 	response := Response{
 		UploadID:     upload.ID,
+		Cursor:       upload.Cursor,
 		NoteID:       upload.NoteID,
 		BlockID:      upload.BlockID,
 		Status:       upload.Status,

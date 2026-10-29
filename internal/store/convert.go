@@ -142,6 +142,8 @@ func fromDBFileUpload(value db.FileUpload) FileUpload {
 		NoteID:              uuid.UUID(value.NoteID.Bytes),
 		OwnerID:             uuid.UUID(value.OwnerID.Bytes),
 		BlockID:             uuid.UUID(value.BlockID.Bytes),
+		Cursor:              value.Cursor.Int64,
+		DeviceID:            value.DeviceID.String,
 		OriginalFilename:    value.OriginalFilename,
 		StorageBucket:       value.StorageBucket,
 		StoragePath:         value.StoragePath,

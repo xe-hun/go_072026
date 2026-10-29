@@ -22,7 +22,7 @@ SET status = 'COMPLETED',
 WHERE id = $1
   AND owner_id = $2
   AND status = 'PENDING'
-RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 `
 
 type CompleteFileUploadParams struct {
@@ -58,6 +58,8 @@ func (q *Queries) CompleteFileUpload(ctx context.Context, arg CompleteFileUpload
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }
@@ -80,11 +82,11 @@ func (q *Queries) CountPendingFileUploads(ctx context.Context, ownerID pgtype.UU
 const createFileUpload = `-- name: CreateFileUpload :one
 INSERT INTO file_uploads (
     id, note_id, owner_id, block_id, original_filename, storage_bucket,
-    storage_path, content_type, expected_size, expires_at
+    storage_path, content_type, expected_size, expires_at, device_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 `
 
 type CreateFileUploadParams struct {
@@ -98,6 +100,7 @@ type CreateFileUploadParams struct {
 	ContentType      string             `json:"content_type"`
 	ExpectedSize     int64              `json:"expected_size"`
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	DeviceID         pgtype.Text        `json:"device_id"`
 }
 
 func (q *Queries) CreateFileUpload(ctx context.Context, arg CreateFileUploadParams) (FileUpload, error) {
@@ -112,6 +115,7 @@ func (q *Queries) CreateFileUpload(ctx context.Context, arg CreateFileUploadPara
 		arg.ContentType,
 		arg.ExpectedSize,
 		arg.ExpiresAt,
+		arg.DeviceID,
 	)
 	var i FileUpload
 	err := row.Scan(
@@ -132,12 +136,14 @@ func (q *Queries) CreateFileUpload(ctx context.Context, arg CreateFileUploadPara
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }
 
 const getFileUploadForOwner = `-- name: GetFileUploadForOwner :one
-SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 FROM file_uploads
 WHERE id = $1
   AND owner_id = $2
@@ -169,12 +175,14 @@ func (q *Queries) GetFileUploadForOwner(ctx context.Context, arg GetFileUploadFo
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }
 
 const listExpiredFileUploads = `-- name: ListExpiredFileUploads :many
-SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 FROM file_uploads
 WHERE status = 'PENDING'
   AND expires_at < $1
@@ -214,6 +222,63 @@ func (q *Queries) ListExpiredFileUploads(ctx context.Context, arg ListExpiredFil
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Cursor,
+			&i.DeviceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFileUploadsAfterCursor = `-- name: ListFileUploadsAfterCursor :many
+SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
+FROM file_uploads
+WHERE owner_id = $1
+  AND cursor > $2
+ORDER BY cursor ASC
+`
+
+type ListFileUploadsAfterCursorParams struct {
+	OwnerID pgtype.UUID `json:"owner_id"`
+	Cursor  pgtype.Int8 `json:"cursor"`
+}
+
+// Returns every upload row after a cursor so the service can preserve feed
+// ordering while handling completed, terminal, pending, and own-device rows.
+func (q *Queries) ListFileUploadsAfterCursor(ctx context.Context, arg ListFileUploadsAfterCursorParams) ([]FileUpload, error) {
+	rows, err := q.db.Query(ctx, listFileUploadsAfterCursor, arg.OwnerID, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FileUpload{}
+	for rows.Next() {
+		var i FileUpload
+		if err := rows.Scan(
+			&i.ID,
+			&i.NoteID,
+			&i.OwnerID,
+			&i.BlockID,
+			&i.OriginalFilename,
+			&i.StorageBucket,
+			&i.StoragePath,
+			&i.ContentType,
+			&i.ExpectedSize,
+			&i.ActualSize,
+			&i.VerifiedContentType,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.ExpiresAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Cursor,
+			&i.DeviceID,
 		); err != nil {
 			return nil, err
 		}
@@ -232,7 +297,7 @@ SET status = 'CANCELLED',
 WHERE id = $1
   AND owner_id = $2
   AND status <> 'DELETED'
-RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 `
 
 type MarkFileUploadCancelledParams struct {
@@ -261,6 +326,8 @@ func (q *Queries) MarkFileUploadCancelled(ctx context.Context, arg MarkFileUploa
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }
@@ -273,7 +340,7 @@ SET status = 'DELETED',
 WHERE id = $1
   AND owner_id = $2
   AND status <> 'DELETED'
-RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 `
 
 type MarkFileUploadDeletedParams struct {
@@ -302,6 +369,8 @@ func (q *Queries) MarkFileUploadDeleted(ctx context.Context, arg MarkFileUploadD
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }
@@ -313,7 +382,7 @@ SET status = 'EXPIRED',
     updated_at = now()
 WHERE id = $1
   AND status = 'PENDING'
-RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 `
 
 type MarkFileUploadExpiredParams struct {
@@ -342,6 +411,8 @@ func (q *Queries) MarkFileUploadExpired(ctx context.Context, arg MarkFileUploadE
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }
@@ -354,7 +425,7 @@ SET status = 'FAILED',
 WHERE id = $1
   AND owner_id = $2
   AND status = 'PENDING'
-RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at
+RETURNING id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 `
 
 type MarkFileUploadFailedParams struct {
@@ -384,6 +455,8 @@ func (q *Queries) MarkFileUploadFailed(ctx context.Context, arg MarkFileUploadFa
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
 	)
 	return i, err
 }

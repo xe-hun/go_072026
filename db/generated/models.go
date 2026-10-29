@@ -35,6 +35,8 @@ type FileUpload struct {
 	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	Cursor              pgtype.Int8        `json:"cursor"`
+	DeviceID            pgtype.Text        `json:"device_id"`
 }
 
 type Note struct {

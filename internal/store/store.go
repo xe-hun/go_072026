@@ -158,6 +158,8 @@ type FileUpload struct {
 	NoteID              uuid.UUID
 	OwnerID             uuid.UUID
 	BlockID             uuid.UUID
+	Cursor              int64
+	DeviceID            string
 	OriginalFilename    string
 	StorageBucket       string
 	StoragePath         string

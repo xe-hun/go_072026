@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ func New(service *uploads.Service) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Post("/initiate", h.Initiate)
+	r.Get("/download-links", h.DownloadLinks)
 	r.Get("/{"+constants.RequestKeyUploadID+"}", h.Get)
 	r.Post("/{"+constants.RequestKeyUploadID+"}/complete", h.Complete)
 	r.Post("/{"+constants.RequestKeyUploadID+"}/download-url", h.DownloadURL)
@@ -49,6 +51,27 @@ func (h *Handler) Initiate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, response)
+}
+
+// DownloadLinks handles GET /v1/uploads/download-links?cursor=...&deviceId=....
+func (h *Handler) DownloadLinks(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpapi.WriteError(w, r, httpapi.Unauthorized())
+		return
+	}
+	query := r.URL.Query()
+	cursor, err := strconv.ParseInt(query.Get(constants.RequestKeyCursor), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyCursor+" must be an integer."))
+		return
+	}
+	response, err := h.service.DownloadURLs(r.Context(), ownerID, query.Get(constants.RequestKeyDeviceID), cursor)
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {

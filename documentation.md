@@ -132,8 +132,10 @@ revocation timestamp, and last global cursor.
 
 `file_uploads` stores the application record for each note/block attachment.
 Each row is linked to the authenticated owner, note, and block, and stores the
-private bucket/path rather than a temporary signed URL or token. The lifecycle
-is `PENDING`, `COMPLETED`, `FAILED`, `EXPIRED`, `CANCELLED`, or `DELETED`.
+private bucket/path rather than a temporary signed URL or token. Each row also
+has an append-only upload cursor and the registered device that initiated it.
+The lifecycle is `PENDING`, `COMPLETED`, `FAILED`, `EXPIRED`, `CANCELLED`, or
+`DELETED`.
 
 ## API Flow
 
@@ -165,16 +167,18 @@ Authenticated routes:
 - `POST /v1/uploads/{uploadId}/complete`
 - `GET /v1/uploads/{uploadId}`
 - `POST /v1/uploads/{uploadId}/download-url`
+- `GET /v1/uploads/download-links?cursor=...&deviceId=...`
 - `DELETE /v1/uploads/{uploadId}`
 
 ### Upload lifecycle
 
-`POST /v1/uploads/initiate` accepts `noteId`, `blockId`, `filename`,
-`contentType`, and positive `size`. The service authenticates the owner,
-checks that the block belongs to the note, validates the configured MIME and
-size limits, writes a pending row, and requests a Supabase signed upload URL.
-The response contains `uploadId`, `bucket`, `path`, `signedUrl`, `token`, and
-`expiresAt`. The token is transient and is not stored or logged.
+`POST /v1/uploads/initiate` accepts `noteId`, `blockId`, registered `deviceId`,
+`filename`, `contentType`, and positive `size`. The service authenticates the
+owner, checks that the device belongs to that owner and is not revoked, checks
+that the block belongs to the note, validates the configured MIME and size
+limits, writes a pending row, and requests a Supabase signed upload URL.
+The response contains `uploadId`, `cursor`, `bucket`, `path`, `signedUrl`,
+`token`, and `expiresAt`. The token is transient and is not stored or logged.
 
 The browser uploads directly to the private bucket using the signed URL. It
 then calls `POST /v1/uploads/{uploadId}/complete` without resubmitting the
@@ -201,11 +205,22 @@ The browser should use the declared content type, avoid storing the signed
 URL longer than needed, and retry completion/status rather than starting a
 second upload after a lost response.
 
-`GET /v1/uploads/{uploadId}` exposes lifecycle metadata without credentials.
+`GET /v1/uploads/{uploadId}` exposes lifecycle metadata to the authenticated
+owner.
 `POST /v1/uploads/{uploadId}/download-url` issues a short-lived private signed
 download URL only for completed, authorized files. `DELETE` removes the
 trusted stored object path and then marks the row `DELETED`; missing objects
 are treated as an idempotent deletion.
+
+`GET /v1/uploads/download-links?cursor=<cursor>&deviceId=<deviceId>` returns
+signed download URLs for completed uploads owned by the authenticated user
+whose upload cursor is after the supplied cursor, excluding uploads initiated
+by the supplied device. It advances through terminal rows and the requesting
+device's rows without returning links for them. A pending upload from another
+device stops cursor advancement until that row completes or becomes terminal,
+so clients cannot skip a file that will become downloadable later. The response
+shape is `{ "links": [...], "nextCursor": 123 }`; clients should persist
+`nextCursor` after processing the links.
 
 The worker reconciles pending rows after `expiresAt` plus
 `SUPABASE_STORAGE_CLEANUP_GRACE_SECONDS`. It verifies any late object before
@@ -243,6 +258,41 @@ Device registration:
 5. Handler returns the device record.
 
 Device revocation soft-disables a device by setting `revoked_at`. Sync rejects revoked devices with `DEVICE_REVOKED`.
+
+## Note Synchronisation Guide
+
+Note synchronisation is a push/pull protocol keyed by the registered device
+identifier and a per-user global change cursor. The cursor belongs to the note
+change feed, not to file-upload cursors.
+
+The normal client flow is:
+
+1. Register one device with `POST /v1/devices` and persist its `deviceId`.
+2. Apply edits locally and queue operations with stable `operationId` values,
+   the note's `baseNoteVersion`, and a per-note `sequence`.
+3. Send queued operations with `POST /v1/sync`. The server authenticates the
+   user, locks the device and affected notes, orders operations, and applies
+   each note batch transactionally. The current note state and its append-only
+   `note_changes` rows commit together.
+4. Treat accepted batches as server-authoritative versions. For a rejected
+   batch, use the returned note snapshot and its `lastAppliedCursor` to rebuild
+   local state before retrying.
+5. Pull remote changes with `GET /v1/sync` using the saved cursor and the same
+   `deviceId`. The server excludes changes written by that device, returns
+   changes in global-sequence order, and returns `nextCursor` for the page.
+6. Apply the page, then persist `nextCursor`. When `hasMore` is true, request
+   another page from that cursor; never advance the cursor from a WebSocket
+   hint alone.
+7. Use `GET /v1/sync/updates-available` or the realtime `sync_available`
+   message as a wake-up signal. A hint only says that a newer change may exist;
+   the normal pull endpoint remains the source of truth.
+
+Retries are safe because operations are idempotent by `(device_id,
+operation_id)`. A version conflict rejects the complete note batch rather than
+partially applying it. Deleted notes and blocks remain as tombstones so their
+deletions can reach offline devices. Full-note responses and snapshots include
+the cursor represented by that state, allowing a client to resume pull sync
+after replacing local state.
 
 ## Sync Flow
 

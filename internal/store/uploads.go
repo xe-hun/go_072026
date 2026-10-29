@@ -18,6 +18,7 @@ func (s *Store) CreateFileUpload(ctx context.Context, upload FileUpload) (FileUp
 		NoteID:           pgUUID(upload.NoteID),
 		OwnerID:          pgUUID(upload.OwnerID),
 		BlockID:          pgUUID(upload.BlockID),
+		DeviceID:         pgtype.Text{String: upload.DeviceID, Valid: upload.DeviceID != ""},
 		OriginalFilename: upload.OriginalFilename,
 		StorageBucket:    upload.StorageBucket,
 		StoragePath:      upload.StoragePath,
@@ -26,6 +27,24 @@ func (s *Store) CreateFileUpload(ctx context.Context, upload FileUpload) (FileUp
 		ExpiresAt:        pgTime(upload.ExpiresAt),
 	})
 	return fromDBFileUpload(row), err
+}
+
+// ListFileUploadsAfterCursor returns a user's upload feed in cursor order.
+// The service applies lifecycle and device filtering because pending uploads
+// must not create a cursor gap that can hide a later completed upload.
+func (s *Store) ListFileUploadsAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64) ([]FileUpload, error) {
+	rows, err := s.q.ListFileUploadsAfterCursor(ctx, db.ListFileUploadsAfterCursorParams{
+		OwnerID: pgUUID(ownerID),
+		Cursor:  pgtype.Int8{Int64: cursor, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]FileUpload, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, fromDBFileUpload(row))
+	}
+	return result, nil
 }
 
 // GetFileUploadForOwner scopes an upload lookup to the authenticated user.

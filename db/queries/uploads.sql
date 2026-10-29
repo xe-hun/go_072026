@@ -1,9 +1,9 @@
 -- name: CreateFileUpload :one
 INSERT INTO file_uploads (
     id, note_id, owner_id, block_id, original_filename, storage_bucket,
-    storage_path, content_type, expected_size, expires_at
+    storage_path, content_type, expected_size, expires_at, device_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING *;
 
@@ -69,6 +69,15 @@ WHERE status = 'PENDING'
   AND expires_at < $1
 ORDER BY expires_at ASC
 LIMIT $2;
+
+-- name: ListFileUploadsAfterCursor :many
+-- Returns every upload row after a cursor so the service can preserve feed
+-- ordering while handling completed, terminal, pending, and own-device rows.
+SELECT *
+FROM file_uploads
+WHERE owner_id = $1
+  AND cursor > $2
+ORDER BY cursor ASC;
 
 -- name: MarkFileUploadExpired :one
 UPDATE file_uploads

@@ -2,6 +2,7 @@ package uploads
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 type fakeRepository struct {
 	mu      sync.Mutex
 	uploads map[uuid.UUID]store.FileUpload
+	cursor  int64
 }
 
 func newFakeRepository() *fakeRepository {
@@ -24,6 +26,10 @@ func newFakeRepository() *fakeRepository {
 
 func (r *fakeRepository) ValidateUploadTarget(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
 	return nil
+}
+
+func (r *fakeRepository) GetDeviceForOwner(_ context.Context, deviceID string, ownerID uuid.UUID) (store.SyncDevice, error) {
+	return store.SyncDevice{ID: deviceID, OwnerID: ownerID}, nil
 }
 
 func (r *fakeRepository) CountPendingFileUploads(_ context.Context, ownerID uuid.UUID) (int64, error) {
@@ -41,11 +47,26 @@ func (r *fakeRepository) CountPendingFileUploads(_ context.Context, ownerID uuid
 func (r *fakeRepository) CreateFileUpload(_ context.Context, upload store.FileUpload) (store.FileUpload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.cursor++
+	upload.Cursor = r.cursor
 	upload.Status = StatusPending
 	upload.CreatedAt = time.Now().UTC()
 	upload.UpdatedAt = upload.CreatedAt
 	r.uploads[upload.ID] = upload
 	return upload, nil
+}
+
+func (r *fakeRepository) ListFileUploadsAfterCursor(_ context.Context, ownerID uuid.UUID, cursor int64) ([]store.FileUpload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make([]store.FileUpload, 0)
+	for _, upload := range r.uploads {
+		if upload.OwnerID == ownerID && upload.Cursor > cursor {
+			result = append(result, upload)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Cursor < result[j].Cursor })
+	return result, nil
 }
 
 func (r *fakeRepository) GetFileUploadForOwner(_ context.Context, uploadID, ownerID uuid.UUID) (store.FileUpload, error) {
@@ -160,7 +181,7 @@ func TestInitiateCreatesPendingRecordAndUniquePath(t *testing.T) {
 	storageClient := &fakeStorage{signed: storage.SignedUpload{URL: "https://storage.test/upload", Token: "secret-token"}}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	request := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
+	request := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
 	response, err := service.Initiate(context.Background(), ownerID, request)
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +206,7 @@ func TestCompleteVerifiesMetadataAndIsIdempotent(t *testing.T) {
 	}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
+	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +225,7 @@ func TestCompleteRejectsMetadataMismatch(t *testing.T) {
 	storageClient := &fakeStorage{info: storage.ObjectInfo{Size: 99, ContentType: "application/pdf"}}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
+	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +244,7 @@ func TestCompleteRejectsMetadataMismatch(t *testing.T) {
 func TestInitiateRejectsUnsafeOrUnsupportedMetadata(t *testing.T) {
 	repository := newFakeRepository()
 	service := NewService(repository, &fakeStorage{}, testConfig())
-	base := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
+	base := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
 	invalid := []InitiateRequest{
 		{NoteID: base.NoteID, BlockID: base.BlockID, Filename: "document.pdf", ContentType: "application/pdf", Size: 0},
 		{NoteID: base.NoteID, BlockID: base.BlockID, Filename: "document.pdf", ContentType: "application/pdf", Size: 11 * 1024 * 1024},
@@ -234,5 +255,36 @@ func TestInitiateRejectsUnsafeOrUnsupportedMetadata(t *testing.T) {
 		if _, err := service.Initiate(context.Background(), uuid.New(), request); err == nil {
 			t.Fatalf("expected invalid metadata to be rejected: %+v", request)
 		}
+	}
+}
+
+func TestDownloadURLsReturnsOnlyCompletedUploadsFromOtherDevices(t *testing.T) {
+	repository := newFakeRepository()
+	storageClient := &fakeStorage{
+		signed: storage.SignedUpload{URL: "https://storage.test/upload", Token: "secret-token"},
+		info:   storage.ObjectInfo{Size: 12, ContentType: "application/pdf"},
+	}
+	service := NewService(repository, storageClient, testConfig())
+	ownerID := uuid.New()
+	phoneUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "phone.pdf", ContentType: "application/pdf", Size: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Complete(context.Background(), ownerID, phoneUpload.UploadID); err != nil {
+		t.Fatal(err)
+	}
+	laptopUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "laptop", Filename: "laptop.pdf", ContentType: "application/pdf", Size: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Complete(context.Background(), ownerID, laptopUpload.UploadID); err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.DownloadURLs(context.Background(), ownerID, "phone", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Links) != 1 || response.Links[0].UploadID != laptopUpload.UploadID || response.NextCursor != laptopUpload.Cursor {
+		t.Fatalf("unexpected download feed response: %+v", response)
 	}
 }

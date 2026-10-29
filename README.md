@@ -102,14 +102,15 @@ worker in `.vscode/launch.json`.
 - `POST /v1/uploads/{uploadId}/complete`
 - `GET /v1/uploads/{uploadId}`
 - `POST /v1/uploads/{uploadId}/download-url`
+- `GET /v1/uploads/download-links?cursor=...&deviceId=...`
 - `DELETE /v1/uploads/{uploadId}`
 
 All `/v1` endpoints require `Authorization: Bearer <JWT>`.
 
 ## Direct File Uploads
 
-Uploads are associated with an authenticated user's note and block. The API
-validates ownership and metadata, creates a `PENDING` record, and returns a
+Uploads are associated with an authenticated user's note, block, and registered
+device. The API validates ownership and metadata, creates a `PENDING` record, and returns a
 temporary Supabase signed upload URL and token. The client sends the bytes
 directly to Supabase, then calls completion; the API independently reads
 Storage metadata and marks the record `COMPLETED` only when size and MIME type
@@ -124,6 +125,7 @@ Example lifecycle:
 
 ```text
 POST /v1/uploads/initiate
+  body includes noteId, blockId, deviceId, filename, contentType, and size
   -> PUT signedUrl?token=... (browser directly to Supabase)
   -> POST /v1/uploads/{uploadId}/complete
   -> POST /v1/uploads/{uploadId}/download-url when the file is needed
@@ -133,6 +135,14 @@ The signed upload URL is temporary and must not be persisted by the client.
 Completion can be retried safely; if the completion response is lost, query
 the status endpoint before initiating another upload. The worker reconciles
 pending records after their expiry plus the configured cleanup grace period.
+Each upload row receives a monotonically increasing cursor when it is created
+and records the registered device that initiated it. To receive completed files
+created after a saved cursor by other devices, call
+`GET /v1/uploads/download-links?cursor=<cursor>&deviceId=<deviceId>`. The
+response contains signed links and `nextCursor`; save that cursor only after
+processing the returned links. The endpoint consumes terminal rows and the
+requesting device's rows without returning links for them. It does not advance
+past a still-pending upload from another device.
 
 ## Sync Notes
 
