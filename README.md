@@ -101,7 +101,7 @@ worker in `.vscode/launch.json`.
 - `POST /v1/uploads/initiate`
 - `POST /v1/uploads/{uploadId}/complete`
 - `GET /v1/uploads/{uploadId}`
-- `POST /v1/uploads/{uploadId}/download-url`
+- `POST /v1/uploads/{blockId}/download-url`
 - `GET /v1/uploads/download-links?cursor=...&deviceId=...`
 - `DELETE /v1/uploads/{uploadId}`
 
@@ -128,7 +128,7 @@ POST /v1/uploads/initiate
   body includes noteId, blockId, deviceId, filename, contentType, and size
   -> PUT signedUrl?token=... (browser directly to Supabase)
   -> POST /v1/uploads/{uploadId}/complete
-  -> POST /v1/uploads/{uploadId}/download-url when the file is needed
+  -> POST /v1/uploads/{blockId}/download-url when the file is needed
 ```
 
 The signed upload URL is temporary and must not be persisted by the client.

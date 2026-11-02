@@ -79,6 +79,22 @@ func (r *fakeRepository) GetFileUploadForOwner(_ context.Context, uploadID, owne
 	return upload, nil
 }
 
+func (r *fakeRepository) GetFileUploadForBlockForOwner(_ context.Context, blockID, ownerID uuid.UUID) (store.FileUpload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var latest store.FileUpload
+	for _, upload := range r.uploads {
+		if upload.BlockID != blockID || upload.OwnerID != ownerID || upload.Cursor <= latest.Cursor {
+			continue
+		}
+		latest = upload
+	}
+	if latest.ID == uuid.Nil {
+		return store.FileUpload{}, store.ErrNotFound
+	}
+	return latest, nil
+}
+
 func (r *fakeRepository) MarkFileUploadFailed(_ context.Context, uploadID, ownerID uuid.UUID, message string) (store.FileUpload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -290,5 +306,39 @@ func TestDownloadURLsSkipsPendingAndOwnDeviceUploads(t *testing.T) {
 	}
 	if len(response.Links) != 1 || response.Links[0].UploadID != readyUpload.UploadID || response.NextCursor != readyUpload.Cursor || pendingUpload.Cursor >= readyUpload.Cursor {
 		t.Fatalf("unexpected download feed response: %+v", response)
+	}
+}
+
+func TestDownloadURLUsesLatestUploadForBlock(t *testing.T) {
+	repository := newFakeRepository()
+	storageClient := &fakeStorage{
+		signed: storage.SignedUpload{URL: "https://storage.test/upload", Token: "secret-token"},
+		info:   storage.ObjectInfo{Size: 12, ContentType: "application/pdf"},
+	}
+	service := NewService(repository, storageClient, testConfig())
+	ownerID := uuid.New()
+	noteID := uuid.New()
+	blockID := uuid.New()
+	first, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: noteID, BlockID: blockID, DeviceID: "phone", Filename: "first.pdf", ContentType: "application/pdf", Size: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Complete(context.Background(), ownerID, first.UploadID); err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: noteID, BlockID: blockID, DeviceID: "phone", Filename: "second.pdf", ContentType: "application/pdf", Size: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Complete(context.Background(), ownerID, second.UploadID); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := service.DownloadURL(context.Background(), ownerID, blockID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.UploadID != second.UploadID {
+		t.Fatalf("download URL resolved upload %s, want latest upload %s", response.UploadID, second.UploadID)
 	}
 }

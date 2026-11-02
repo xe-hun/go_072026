@@ -13,6 +13,16 @@ FROM file_uploads
 WHERE id = $1
   AND owner_id = $2;
 
+-- name: GetFileUploadForBlockForOwner :one
+-- A block may have multiple upload attempts; use the latest attempt so a
+-- newer pending or terminal attempt cannot expose an older file.
+SELECT *
+FROM file_uploads
+WHERE block_id = $1
+  AND owner_id = $2
+ORDER BY cursor DESC
+LIMIT 1;
+
 -- name: CountPendingFileUploads :one
 SELECT count(*)
 FROM file_uploads

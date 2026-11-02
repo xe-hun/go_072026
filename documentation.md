@@ -166,7 +166,7 @@ Authenticated routes:
 - `POST /v1/uploads/initiate`
 - `POST /v1/uploads/{uploadId}/complete`
 - `GET /v1/uploads/{uploadId}`
-- `POST /v1/uploads/{uploadId}/download-url`
+- `POST /v1/uploads/{blockId}/download-url`
 - `GET /v1/uploads/download-links?cursor=...&deviceId=...`
 - `DELETE /v1/uploads/{uploadId}`
 
@@ -207,9 +207,10 @@ second upload after a lost response.
 
 `GET /v1/uploads/{uploadId}` exposes lifecycle metadata to the authenticated
 owner.
-`POST /v1/uploads/{uploadId}/download-url` issues a short-lived private signed
-download URL only for completed, authorized files. `DELETE` removes the
-trusted stored object path and then marks the row `DELETED`; missing objects
+`POST /v1/uploads/{blockId}/download-url` finds the latest upload attempt for
+that block and issues a short-lived private signed download URL only for
+completed, authorized files. `DELETE` removes the trusted stored object path
+and then marks the row `DELETED`; missing objects
 are treated as an idempotent deletion.
 
 `GET /v1/uploads/download-links?cursor=<cursor>&deviceId=<deviceId>` returns

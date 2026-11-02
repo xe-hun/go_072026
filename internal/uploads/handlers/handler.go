@@ -29,7 +29,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/download-links", h.DownloadLinks)
 	r.Get("/{"+constants.RequestKeyUploadID+"}", h.Get)
 	r.Post("/{"+constants.RequestKeyUploadID+"}/complete", h.Complete)
-	r.Post("/{"+constants.RequestKeyUploadID+"}/download-url", h.DownloadURL)
+	r.Post("/{"+constants.RequestKeyBlockId+"}/download-url", h.DownloadURL)
 	r.Delete("/{"+constants.RequestKeyUploadID+"}", h.Delete)
 	return r
 }
@@ -101,16 +101,30 @@ func (h *Handler) Complete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DownloadURL(w http.ResponseWriter, r *http.Request) {
-	ownerID, uploadID, ok := h.identity(w, r)
+	ownerID, blockID, ok := h.blockIdentity(w, r)
 	if !ok {
 		return
 	}
-	response, err := h.service.DownloadURL(r.Context(), ownerID, uploadID)
+	response, err := h.service.DownloadURL(r.Context(), ownerID, blockID)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, response)
+}
+
+func (h *Handler) blockIdentity(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+	ownerID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpapi.WriteError(w, r, httpapi.Unauthorized())
+		return uuid.Nil, uuid.Nil, false
+	}
+	blockID, err := uuid.Parse(chi.URLParam(r, constants.RequestKeyBlockId))
+	if err != nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest("Block ID must be a UUID."))
+		return uuid.Nil, uuid.Nil, false
+	}
+	return ownerID, blockID, true
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {

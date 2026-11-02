@@ -27,6 +27,7 @@ type Repository interface {
 	CountPendingFileUploads(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CreateFileUpload(ctx context.Context, upload store.FileUpload) (store.FileUpload, error)
 	GetFileUploadForOwner(ctx context.Context, uploadID, ownerID uuid.UUID) (store.FileUpload, error)
+	GetFileUploadForBlockForOwner(ctx context.Context, blockID, ownerID uuid.UUID) (store.FileUpload, error)
 	ListFileUploadsAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64) ([]store.FileUpload, error)
 	MarkFileUploadFailed(ctx context.Context, uploadID, ownerID uuid.UUID, message string) (store.FileUpload, error)
 	CompleteFileUpload(ctx context.Context, uploadID, ownerID uuid.UUID, actualSize int64, verifiedContentType string) (store.FileUpload, error)
@@ -201,10 +202,10 @@ func (s *Service) Get(ctx context.Context, ownerID, uploadID uuid.UUID) (Respons
 	return responseFromEntity(entity), nil
 }
 
-// DownloadURL verifies ownership and completion before creating a short-lived
-// private-bucket URL.
-func (s *Service) DownloadURL(ctx context.Context, ownerID, uploadID uuid.UUID) (DownloadURLResponse, error) {
-	entity, err := s.repository.GetFileUploadForOwner(ctx, uploadID, ownerID)
+// DownloadURL finds the latest upload attempt for a block, verifies ownership
+// and completion, then creates a short-lived private-bucket URL.
+func (s *Service) DownloadURL(ctx context.Context, ownerID, blockID uuid.UUID) (DownloadURLResponse, error) {
+	entity, err := s.repository.GetFileUploadForBlockForOwner(ctx, blockID, ownerID)
 	if err != nil {
 		return DownloadURLResponse{}, mapRepositoryError(err, "Upload not found.")
 	}
