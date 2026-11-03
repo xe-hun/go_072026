@@ -73,6 +73,8 @@ type Response struct {
 // credentials.
 type DownloadURLResponse struct {
 	Cursor    int64     `json:"cursor"`
+	NoteID    uuid.UUID `json:"noteId"`
+	BlockID   uuid.UUID `json:"blockId"`
 	UploadID  uuid.UUID `json:"uploadId"`
 	SignedURL string    `json:"signedUrl"`
 	ExpiresAt time.Time `json:"expiresAt"`
