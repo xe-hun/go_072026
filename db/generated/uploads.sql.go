@@ -142,6 +142,49 @@ func (q *Queries) CreateFileUpload(ctx context.Context, arg CreateFileUploadPara
 	return i, err
 }
 
+const getFileUploadForBlockForOwner = `-- name: GetFileUploadForBlockForOwner :one
+SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
+FROM file_uploads
+WHERE block_id = $1
+  AND owner_id = $2
+ORDER BY cursor DESC
+LIMIT 1
+`
+
+type GetFileUploadForBlockForOwnerParams struct {
+	BlockID pgtype.UUID `json:"block_id"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+// A block may have multiple upload attempts; use the latest attempt so a
+// newer pending or terminal attempt cannot expose an older file.
+func (q *Queries) GetFileUploadForBlockForOwner(ctx context.Context, arg GetFileUploadForBlockForOwnerParams) (FileUpload, error) {
+	row := q.db.QueryRow(ctx, getFileUploadForBlockForOwner, arg.BlockID, arg.OwnerID)
+	var i FileUpload
+	err := row.Scan(
+		&i.ID,
+		&i.NoteID,
+		&i.OwnerID,
+		&i.BlockID,
+		&i.OriginalFilename,
+		&i.StorageBucket,
+		&i.StoragePath,
+		&i.ContentType,
+		&i.ExpectedSize,
+		&i.ActualSize,
+		&i.VerifiedContentType,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.ExpiresAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Cursor,
+		&i.DeviceID,
+	)
+	return i, err
+}
+
 const getFileUploadForOwner = `-- name: GetFileUploadForOwner :one
 SELECT id, note_id, owner_id, block_id, original_filename, storage_bucket, storage_path, content_type, expected_size, actual_size, verified_content_type, status, error_message, expires_at, completed_at, created_at, updated_at, cursor, device_id
 FROM file_uploads

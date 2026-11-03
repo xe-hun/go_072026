@@ -56,6 +56,16 @@ func (s *Store) GetFileUploadForOwner(ctx context.Context, uploadID, ownerID uui
 	return fromDBFileUpload(row), mapNoRows(err)
 }
 
+// GetFileUploadForBlockForOwner returns the latest upload attempt for an
+// authenticated owner's block.
+func (s *Store) GetFileUploadForBlockForOwner(ctx context.Context, blockID, ownerID uuid.UUID) (FileUpload, error) {
+	row, err := s.q.GetFileUploadForBlockForOwner(ctx, db.GetFileUploadForBlockForOwnerParams{
+		BlockID: pgUUID(blockID),
+		OwnerID: pgUUID(ownerID),
+	})
+	return fromDBFileUpload(row), mapNoRows(err)
+}
+
 // CountPendingFileUploads limits storage authorization abuse without counting
 // expired rows that are waiting for worker reconciliation.
 func (s *Store) CountPendingFileUploads(ctx context.Context, ownerID uuid.UUID) (int64, error) {
