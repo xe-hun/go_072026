@@ -48,9 +48,10 @@ const (
 	RequestKeyBlocks          = "blocks"
 
 	// Block properties.
-	RequestKeyBlock           = "block"
-	RequestKeyBlockType       = "blockType"
-	RequestKeyPosition        = "position"
+	RequestKeyBlock     = "block"
+	RequestKeyBlockType = "blockType"
+	// RequestKeyPosition        = "position"
+	RequestKeyPosition        = "fractionalPosition"
 	RequestKeyBlockProperties = "blockProperties"
 
 	// Supported block types.
