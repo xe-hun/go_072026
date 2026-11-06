@@ -225,6 +225,8 @@ func (s *Service) DownloadURL(ctx context.Context, ownerID, blockID uuid.UUID) (
 	return DownloadURLResponse{
 		Cursor:    entity.Cursor,
 		UploadID:  entity.ID,
+		NoteID:    entity.NoteID,
+		BlockID:   entity.BlockID,
 		SignedURL: urlValue,
 		ExpiresAt: time.Now().UTC().Add(s.downloadTTL),
 	}, nil
@@ -266,6 +268,8 @@ func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID 
 		response.Links = append(response.Links, DownloadURLResponse{
 			Cursor:    entity.Cursor,
 			UploadID:  entity.ID,
+			NoteID:    entity.NoteID,
+			BlockID:   entity.BlockID,
 			SignedURL: urlValue,
 			ExpiresAt: time.Now().UTC().Add(s.downloadTTL),
 		})
