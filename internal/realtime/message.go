@@ -9,8 +9,6 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-
-	constants "notes-server/internal"
 )
 
 const syncAvailableMessageType = "sync_available"
@@ -18,12 +16,10 @@ const syncAvailableMessageType = "sync_available"
 // SyncAvailableEvent is the small event exchanged between sync API and
 // WebSocket server instances.
 //
-// Device IDs are strings in this project because they are client-supplied
-// identifiers in sync_devices. The event carries no note data or operation
-// payloads.
+// The event carries no note data or operation payloads.
 type SyncAvailableEvent struct {
 	UserID         uuid.UUID `json:"userId"`
-	OriginDeviceID string    `json:"originDeviceId"`
+	OriginDeviceID uuid.UUID `json:"originDeviceId"`
 	LatestCursor   int64     `json:"latestCursor"`
 }
 
@@ -32,7 +28,7 @@ func (e SyncAvailableEvent) Validate() error {
 	if e.UserID == uuid.Nil {
 		return errors.New("sync available event user ID is required")
 	}
-	if !constants.ValidDeviceID(e.OriginDeviceID) {
+	if e.OriginDeviceID == uuid.Nil {
 		return errors.New("sync available event origin device ID is invalid")
 	}
 	if e.LatestCursor < 0 {

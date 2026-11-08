@@ -35,7 +35,7 @@ func TestCommittedRealtimePublishFailureIsBestEffort(t *testing.T) {
 	// The sync transaction has already returned successfully before this helper
 	// is called. A broker failure must therefore be observable only through the
 	// log, not as a failed sync result or panic.
-	service.publishCommittedSyncAvailable(context.Background(), uuid.New(), "phone", 8425)
+	service.publishCommittedSyncAvailable(context.Background(), uuid.New(), uuid.New(), 8425)
 	if eventBus.calls != 1 {
 		t.Fatalf("publish calls = %d, want 1", eventBus.calls)
 	}

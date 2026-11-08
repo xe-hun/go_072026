@@ -14,11 +14,8 @@ func (r Request) Validate(maxOperations int) error {
 	if r.ProtocolVersion != ProtocolVersion {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
-	if r.DeviceID == "" {
+	if r.DeviceID == uuid.Nil {
 		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
-	}
-	if !constants.ValidDeviceID(r.DeviceID) {
-		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 	if len(r.Operations) > maxOperations {
 		return httpapi.NewError(http.StatusRequestEntityTooLarge, httpapi.CodePayloadTooLarge, "The sync request contains too many operations.")
@@ -31,11 +28,8 @@ func (r PullRequest) Validate() error {
 	if r.ProtocolVersion != ProtocolVersion {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
-	if r.DeviceID == "" {
+	if r.DeviceID == uuid.Nil {
 		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
-	}
-	if !constants.ValidDeviceID(r.DeviceID) {
-		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 	if r.Cursor < 0 {
 		return httpapi.InvalidRequest(constants.RequestKeyCursor + " must be greater than or equal to zero.")
@@ -48,11 +42,11 @@ func (r UpdatesAvailableRequest) Validate() error {
 	if r.ProtocolVersion != ProtocolVersion {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
-	if r.DeviceID == "" {
+	if r.DeviceID == uuid.Nil {
 		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
 	}
-	if !constants.ValidDeviceID(r.DeviceID) {
-		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
+	if r.Cursor < 0 {
+		return httpapi.InvalidRequest(constants.RequestKeyCursor + " must be greater than or equal to zero.")
 	}
 	return nil
 }

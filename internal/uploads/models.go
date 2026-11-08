@@ -22,7 +22,7 @@ const (
 type InitiateRequest struct {
 	NoteID      uuid.UUID `json:"noteId"`
 	BlockID     uuid.UUID `json:"blockId"`
-	DeviceID    string    `json:"deviceId"`
+	DeviceID    uuid.UUID `json:"deviceId"`
 	Filename    string    `json:"filename"`
 	ContentType string    `json:"contentType"`
 	Size        int64     `json:"size"`

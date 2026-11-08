@@ -94,7 +94,7 @@ worker in `.vscode/launch.json`.
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
 - `GET /v1/sync?protocolVersion=1&clientVersion=...&deviceId=...&cursor=...`
-- `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
+- `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...&cursor=...`
 - `GET /v1/realtime?deviceId=...` (WebSocket server, port `8082` by default)
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
@@ -146,8 +146,8 @@ links for them, so one unavailable upload does not block ready files.
 
 ## Sync Notes
 
-Device registration requires a client-supplied `deviceId` string with 30
-characters or fewer. The same value is used by the sync and revoke endpoints.
+Device registration requires a client-supplied UUID `deviceId`. The same UUID is
+used by the sync and revoke endpoints.
 
 The sync POST endpoint accepts a batch of note/block operations without a cursor. Client operations
 include a per-note integer `sequence`; the server sorts by `noteId` and then
@@ -164,8 +164,8 @@ state. Clients can use it as the starting cursor after applying that state.
 The sync GET endpoint pulls remote changes after its query-string cursor. It
 returns `changes`, `hasMore`, and `nextCursor`; pulled changes expose
 `globalSequence` and `resultingNoteVersion`, and omit `operationId` and `blockId`.
-The updates-available endpoint uses the authenticated user's persisted device
-cursor and returns `updatesAvailable` without fetching the change records.
+The updates-available endpoint accepts the client-supplied cursor and returns
+`updatesAvailable` without fetching the change records.
 
 `modify_note_property` replaces the note's properties with the supplied
 `noteProperties` object, `modify_note_title` receives a nested `textDelta`,
@@ -207,8 +207,8 @@ after reconnects or missed notifications.
 
 ## Assumptions
 
-- The client supplies a device ID string of at most 30 characters and normally
-  generates note, block, and operation UUIDs.
+- The client supplies a device UUID and normally generates note, block, and
+  operation UUIDs.
 - Text edits are stored as structured operations/changed fields, not raw character diffs.
 - Automatic text conflict merging is intentionally not implemented in v1.
 - Snapshot jobs are queued when configured thresholds are reached; cleanup/compaction hooks are present and deliberately conservative.

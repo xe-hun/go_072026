@@ -10,7 +10,7 @@ import (
 )
 
 // results in note version 1.
-func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) createNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	if op.BaseNoteVersion != 0 {
 		rejected := RejectedConflict(op, 0)
 		return nil, &rejected, nil
@@ -72,7 +72,7 @@ func (s *Service) existingNote(ctx context.Context, tx *store.Store, ownerID uui
 	return nil, nil
 }
 
-func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	deleted, err := tx.DeleteNote(ctx, op.NoteID, ownerID, op.BaseNoteVersion)
 	if errors.Is(err, store.ErrNotFound) {
 		current, lookupErr := tx.GetNoteForOwnerForUpdate(ctx, op.NoteID, ownerID)
@@ -101,7 +101,7 @@ func (s *Service) deleteNote(ctx context.Context, tx *store.Store, ownerID uuid.
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
-func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation NoteMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteProperty); err != nil {
 		rejected := RejectedInvalid(op, err.Error())
@@ -114,7 +114,7 @@ func (s *Service) modifyNoteProperty(ctx context.Context, tx *store.Store, owner
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
-func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation NoteMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyNoteTitle); err != nil {
 		rejected := RejectedInvalid(op, err.Error())
@@ -132,7 +132,7 @@ func (s *Service) modifyNoteTitle(ctx context.Context, tx *store.Store, ownerID 
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, nil)
 }
 
-func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, note *store.Note, op ClientOperation, blockID *uuid.UUID) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) acceptOperationChange(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, note *store.Note, op ClientOperation, blockID *uuid.UUID) (*AcceptedDTO, *RejectedDTO, error) {
 	baseVersion := note.CurrentVersion
 	change, err := s.insertChange(ctx, tx, ownerID, deviceID, op, blockID, baseVersion, baseVersion+1)
 	if err != nil {

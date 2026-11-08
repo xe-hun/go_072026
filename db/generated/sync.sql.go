@@ -38,7 +38,7 @@ WHERE device_id = $1
 `
 
 type FindProcessedOperationParams struct {
-	DeviceID          string      `json:"device_id"`
+	DeviceID          pgtype.UUID `json:"device_id"`
 	ClientOperationID pgtype.UUID `json:"client_operation_id"`
 }
 
@@ -78,7 +78,7 @@ LIMIT $4
 type GetChangesAfterCursorParams struct {
 	OwnerID        pgtype.UUID `json:"owner_id"`
 	GlobalSequence pgtype.Int8 `json:"global_sequence"`
-	DeviceID       string      `json:"device_id"`
+	DeviceID       pgtype.UUID `json:"device_id"`
 	Limit          int32       `json:"limit"`
 }
 
@@ -150,7 +150,7 @@ SELECT EXISTS (
 type HasChangesAfterCursorParams struct {
 	OwnerID        pgtype.UUID `json:"owner_id"`
 	GlobalSequence pgtype.Int8 `json:"global_sequence"`
-	DeviceID       string      `json:"device_id"`
+	DeviceID       pgtype.UUID `json:"device_id"`
 }
 
 // Checks for remote changes after a device cursor.
@@ -186,7 +186,7 @@ type InsertNoteChangeParams struct {
 	OwnerID              pgtype.UUID `json:"owner_id"`
 	NoteID               pgtype.UUID `json:"note_id"`
 	BlockID              pgtype.UUID `json:"block_id"`
-	DeviceID             string      `json:"device_id"`
+	DeviceID             pgtype.UUID `json:"device_id"`
 	ClientOperationID    pgtype.UUID `json:"client_operation_id"`
 	OperationType        string      `json:"operation_type"`
 	BaseNoteVersion      int64       `json:"base_note_version"`

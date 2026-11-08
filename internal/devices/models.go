@@ -15,26 +15,22 @@ import (
 // Device is the device model used between HTTP requests, persistence entities,
 // and API responses. It contains normalized values only.
 type Device struct {
-	ID               string
-	OwnerID          uuid.UUID
-	DeviceName       *string
-	Platform         *string
-	AppVersion       *string
-	ProtocolVersion  int32
-	LastGlobalCursor int64
-	LastSeenAt       time.Time
-	CreatedAt        time.Time
-	RevokedAt        *time.Time
+	DeviceID        uuid.UUID
+	OwnerID         uuid.UUID
+	DeviceName      *string
+	Platform        *string
+	AppVersion      *string
+	ProtocolVersion int32
+	LastSeenAt      time.Time
+	CreatedAt       time.Time
+	RevokedAt       *time.Time
 }
 
 // FromRequest builds a device model from the registration request and applies
 // request-level defaults and validation.
 func (m *Device) FromRequest(req RegisterDeviceRequest) error {
-	if req.DeviceID == "" {
+	if req.DeviceID == uuid.Nil {
 		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
-	}
-	if !constants.ValidDeviceID(req.DeviceID) {
-		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 
 	protocolVersion := req.ProtocolVersion
@@ -45,7 +41,7 @@ func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 		return httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
 
-	m.ID = req.DeviceID
+	m.DeviceID = req.DeviceID
 	m.DeviceName = req.DeviceName
 	m.Platform = req.Platform
 	m.AppVersion = req.AppVersion
@@ -55,20 +51,19 @@ func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 
 // FromEntity maps a persistence entity into the device model.
 func (m *Device) FromEntity(entity store.SyncDevice) error {
-	if !constants.ValidDeviceID(entity.ID) || entity.OwnerID == uuid.Nil {
+	if entity.DeviceID == uuid.Nil || entity.OwnerID == uuid.Nil {
 		return errors.New("device entity must contain valid identifiers")
 	}
 	if entity.ProtocolVersion != 1 {
 		return errors.New("device entity has an unsupported protocol version")
 	}
 
-	m.ID = entity.ID
+	m.DeviceID = entity.DeviceID
 	m.OwnerID = entity.OwnerID
 	m.DeviceName = store.TextPtr(entity.DeviceName)
 	m.Platform = store.TextPtr(entity.Platform)
 	m.AppVersion = store.TextPtr(entity.AppVersion)
 	m.ProtocolVersion = entity.ProtocolVersion
-	m.LastGlobalCursor = entity.LastGlobalCursor
 	m.LastSeenAt = entity.LastSeenAt
 	m.CreatedAt = entity.CreatedAt
 	m.RevokedAt = store.TimePtr(entity.RevokedAt)
@@ -77,14 +72,14 @@ func (m *Device) FromEntity(entity store.SyncDevice) error {
 
 // Entity converts the model into the persistence input for device creation.
 func (m Device) Entity(ownerID uuid.UUID) (store.CreateDeviceParams, error) {
-	if ownerID == uuid.Nil || !constants.ValidDeviceID(m.ID) {
+	if ownerID == uuid.Nil || m.DeviceID == uuid.Nil {
 		return store.CreateDeviceParams{}, httpapi.InvalidRequest("device identifiers are required.")
 	}
 	if m.ProtocolVersion != 1 {
 		return store.CreateDeviceParams{}, httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
 	return store.CreateDeviceParams{
-		ID:              m.ID,
+		DeviceID:        m.DeviceID,
 		OwnerID:         ownerID,
 		DeviceName:      m.DeviceName,
 		Platform:        m.Platform,
@@ -96,15 +91,14 @@ func (m Device) Entity(ownerID uuid.UUID) (store.CreateDeviceParams, error) {
 // Response converts the model into the public API representation.
 func (m Device) Response() DeviceResponse {
 	return DeviceResponse{
-		ID:               m.ID,
-		DeviceName:       m.DeviceName,
-		Platform:         m.Platform,
-		AppVersion:       m.AppVersion,
-		ProtocolVersion:  m.ProtocolVersion,
-		LastGlobalCursor: m.LastGlobalCursor,
-		LastSeenAt:       m.LastSeenAt,
-		CreatedAt:        m.CreatedAt,
-		RevokedAt:        m.RevokedAt,
+		ID:              m.DeviceID,
+		DeviceName:      m.DeviceName,
+		Platform:        m.Platform,
+		AppVersion:      m.AppVersion,
+		ProtocolVersion: m.ProtocolVersion,
+		LastSeenAt:      m.LastSeenAt,
+		CreatedAt:       m.CreatedAt,
+		RevokedAt:       m.RevokedAt,
 	}
 }
 

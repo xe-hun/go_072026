@@ -13,15 +13,15 @@ import (
 
 const createDevice = `-- name: CreateDevice :one
 INSERT INTO sync_devices (
-    id, owner_id, device_name, platform, app_version, protocol_version
+    device_id, owner_id, device_name, platform, app_version, protocol_version
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
-RETURNING id, owner_id, device_name, platform, app_version, protocol_version, last_global_cursor, last_seen_at, created_at, revoked_at
+RETURNING device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
 `
 
 type CreateDeviceParams struct {
-	ID              string      `json:"id"`
+	DeviceID        pgtype.UUID `json:"device_id"`
 	OwnerID         pgtype.UUID `json:"owner_id"`
 	DeviceName      pgtype.Text `json:"device_name"`
 	Platform        pgtype.Text `json:"platform"`
@@ -32,7 +32,7 @@ type CreateDeviceParams struct {
 // Inserts a user-owned sync device and returns its stored state.
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (SyncDevice, error) {
 	row := q.db.QueryRow(ctx, createDevice,
-		arg.ID,
+		arg.DeviceID,
 		arg.OwnerID,
 		arg.DeviceName,
 		arg.Platform,
@@ -41,13 +41,12 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Syn
 	)
 	var i SyncDevice
 	err := row.Scan(
-		&i.ID,
+		&i.DeviceID,
 		&i.OwnerID,
 		&i.DeviceName,
 		&i.Platform,
 		&i.AppVersion,
 		&i.ProtocolVersion,
-		&i.LastGlobalCursor,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
@@ -56,29 +55,28 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Syn
 }
 
 const getDeviceForOwner = `-- name: GetDeviceForOwner :one
-SELECT id, owner_id, device_name, platform, app_version, protocol_version, last_global_cursor, last_seen_at, created_at, revoked_at
+SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
 FROM sync_devices
-WHERE id = $1
+WHERE device_id = $1
   AND owner_id = $2
 `
 
 type GetDeviceForOwnerParams struct {
-	ID      string      `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
+	DeviceID pgtype.UUID `json:"device_id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
 }
 
 // Fetches one device with owner scoping.
 func (q *Queries) GetDeviceForOwner(ctx context.Context, arg GetDeviceForOwnerParams) (SyncDevice, error) {
-	row := q.db.QueryRow(ctx, getDeviceForOwner, arg.ID, arg.OwnerID)
+	row := q.db.QueryRow(ctx, getDeviceForOwner, arg.DeviceID, arg.OwnerID)
 	var i SyncDevice
 	err := row.Scan(
-		&i.ID,
+		&i.DeviceID,
 		&i.OwnerID,
 		&i.DeviceName,
 		&i.Platform,
 		&i.AppVersion,
 		&i.ProtocolVersion,
-		&i.LastGlobalCursor,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
@@ -87,30 +85,29 @@ func (q *Queries) GetDeviceForOwner(ctx context.Context, arg GetDeviceForOwnerPa
 }
 
 const getDeviceForOwnerForUpdate = `-- name: GetDeviceForOwnerForUpdate :one
-SELECT id, owner_id, device_name, platform, app_version, protocol_version, last_global_cursor, last_seen_at, created_at, revoked_at
+SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
 FROM sync_devices
-WHERE id = $1
+WHERE device_id = $1
   AND owner_id = $2
 FOR UPDATE
 `
 
 type GetDeviceForOwnerForUpdateParams struct {
-	ID      string      `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
+	DeviceID pgtype.UUID `json:"device_id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
 }
 
-// Fetches and locks one device for cursor/last_seen updates.
+// Fetches and locks one device for sync/last_seen updates.
 func (q *Queries) GetDeviceForOwnerForUpdate(ctx context.Context, arg GetDeviceForOwnerForUpdateParams) (SyncDevice, error) {
-	row := q.db.QueryRow(ctx, getDeviceForOwnerForUpdate, arg.ID, arg.OwnerID)
+	row := q.db.QueryRow(ctx, getDeviceForOwnerForUpdate, arg.DeviceID, arg.OwnerID)
 	var i SyncDevice
 	err := row.Scan(
-		&i.ID,
+		&i.DeviceID,
 		&i.OwnerID,
 		&i.DeviceName,
 		&i.Platform,
 		&i.AppVersion,
 		&i.ProtocolVersion,
-		&i.LastGlobalCursor,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
@@ -119,7 +116,7 @@ func (q *Queries) GetDeviceForOwnerForUpdate(ctx context.Context, arg GetDeviceF
 }
 
 const listDevices = `-- name: ListDevices :many
-SELECT id, owner_id, device_name, platform, app_version, protocol_version, last_global_cursor, last_seen_at, created_at, revoked_at
+SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
 FROM sync_devices
 WHERE owner_id = $1
 ORDER BY created_at DESC
@@ -136,13 +133,12 @@ func (q *Queries) ListDevices(ctx context.Context, ownerID pgtype.UUID) ([]SyncD
 	for rows.Next() {
 		var i SyncDevice
 		if err := rows.Scan(
-			&i.ID,
+			&i.DeviceID,
 			&i.OwnerID,
 			&i.DeviceName,
 			&i.Platform,
 			&i.AppVersion,
 			&i.ProtocolVersion,
-			&i.LastGlobalCursor,
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.RevokedAt,
@@ -161,38 +157,36 @@ const revokeDevice = `-- name: RevokeDevice :exec
 UPDATE sync_devices
 SET revoked_at = now(),
     last_seen_at = now()
-WHERE id = $1
+WHERE device_id = $1
   AND owner_id = $2
   AND revoked_at IS NULL
 `
 
 type RevokeDeviceParams struct {
-	ID      string      `json:"id"`
-	OwnerID pgtype.UUID `json:"owner_id"`
+	DeviceID pgtype.UUID `json:"device_id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
 }
 
 // Soft-revokes a device so future sync calls are rejected.
 func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) error {
-	_, err := q.db.Exec(ctx, revokeDevice, arg.ID, arg.OwnerID)
+	_, err := q.db.Exec(ctx, revokeDevice, arg.DeviceID, arg.OwnerID)
 	return err
 }
 
-const updateDeviceCursor = `-- name: UpdateDeviceCursor :exec
+const touchDevice = `-- name: TouchDevice :exec
 UPDATE sync_devices
-SET last_global_cursor = GREATEST(last_global_cursor, $3),
-    last_seen_at = now()
-WHERE id = $1
+SET last_seen_at = now()
+WHERE device_id = $1
   AND owner_id = $2
 `
 
-type UpdateDeviceCursorParams struct {
-	ID               string      `json:"id"`
-	OwnerID          pgtype.UUID `json:"owner_id"`
-	LastGlobalCursor int64       `json:"last_global_cursor"`
+type TouchDeviceParams struct {
+	DeviceID pgtype.UUID `json:"device_id"`
+	OwnerID  pgtype.UUID `json:"owner_id"`
 }
 
-// Advances the cursor without allowing it to move backwards.
-func (q *Queries) UpdateDeviceCursor(ctx context.Context, arg UpdateDeviceCursorParams) error {
-	_, err := q.db.Exec(ctx, updateDeviceCursor, arg.ID, arg.OwnerID, arg.LastGlobalCursor)
+// Updates device activity after a successful sync.
+func (q *Queries) TouchDevice(ctx context.Context, arg TouchDeviceParams) error {
+	_, err := q.db.Exec(ctx, touchDevice, arg.DeviceID, arg.OwnerID)
 	return err
 }

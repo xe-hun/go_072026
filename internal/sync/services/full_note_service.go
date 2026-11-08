@@ -13,8 +13,8 @@ import (
 
 // snapshot for each supplied note ID.
 func (s *Service) SyncFullNote(ctx context.Context, ownerID uuid.UUID, req FullNoteRequest) ([]NoteSnapshot, error) {
-	if !constants.ValidDeviceID(req.DeviceID) {
-		return nil, httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required and must be 30 characters or fewer.")
+	if req.DeviceID == uuid.Nil {
+		return nil, httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required and must be a valid UUID.")
 	}
 	if len(req.NoteIDs) == 0 {
 		return nil, httpapi.InvalidRequest("noteIds must contain at least one note ID.")

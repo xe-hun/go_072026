@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	constants "notes-server/internal"
 	"notes-server/internal/config"
@@ -23,7 +24,7 @@ import (
 // Repository is the upload persistence surface used by the service.
 type Repository interface {
 	ValidateUploadTarget(ctx context.Context, noteID, blockID, ownerID uuid.UUID) error
-	GetDeviceForOwner(ctx context.Context, deviceID string, ownerID uuid.UUID) (store.SyncDevice, error)
+	GetDeviceForOwner(ctx context.Context, deviceID uuid.UUID, ownerID uuid.UUID) (store.SyncDevice, error)
 	CountPendingFileUploads(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CreateFileUpload(ctx context.Context, upload store.FileUpload) (store.FileUpload, error)
 	GetFileUploadForOwner(ctx context.Context, uploadID, ownerID uuid.UUID) (store.FileUpload, error)
@@ -97,7 +98,7 @@ func (s *Service) Initiate(ctx context.Context, ownerID uuid.UUID, request Initi
 		NoteID:           request.NoteID,
 		OwnerID:          ownerID,
 		BlockID:          request.BlockID,
-		DeviceID:         request.DeviceID,
+		DeviceID:         pgtype.UUID{Bytes: request.DeviceID, Valid: true},
 		OriginalFilename: strings.TrimSpace(request.Filename),
 		StorageBucket:    s.bucket,
 		StoragePath:      path,
@@ -235,7 +236,7 @@ func (s *Service) DownloadURL(ctx context.Context, ownerID, blockID uuid.UUID) (
 // DownloadURLs returns ready upload links after cursor in feed order. Rows
 // from the requesting device and uploads that cannot produce a link are
 // consumed but never returned so one problematic upload cannot block the feed.
-func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID string, cursor int64) (DownloadLinksResponse, error) {
+func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID uuid.UUID, cursor int64) (DownloadLinksResponse, error) {
 	if err := validateCursor(cursor); err != nil {
 		return DownloadLinksResponse{}, err
 	}
@@ -252,7 +253,7 @@ func (s *Service) DownloadURLs(ctx context.Context, ownerID uuid.UUID, deviceID 
 	}
 	for _, entity := range entities {
 		response.NextCursor = entity.Cursor
-		if entity.DeviceID == deviceID {
+		if entity.DeviceID.Valid && uuid.UUID(entity.DeviceID.Bytes) == deviceID {
 			continue
 		}
 		if entity.Status != StatusCompleted {
@@ -358,17 +359,14 @@ func validateCursor(cursor int64) error {
 	return nil
 }
 
-func validateDeviceID(deviceID string) error {
-	if deviceID == "" {
+func validateDeviceID(deviceID uuid.UUID) error {
+	if deviceID == uuid.Nil {
 		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
-	}
-	if !constants.ValidDeviceID(deviceID) {
-		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " must be 30 characters or fewer.")
 	}
 	return nil
 }
 
-func (s *Service) validateDevice(ctx context.Context, ownerID uuid.UUID, deviceID string) error {
+func (s *Service) validateDevice(ctx context.Context, ownerID uuid.UUID, deviceID uuid.UUID) error {
 	if err := validateDeviceID(deviceID); err != nil {
 		return err
 	}

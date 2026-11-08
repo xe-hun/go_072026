@@ -11,7 +11,7 @@ import (
 )
 
 // operation implementation.
-func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*noteBatchState, *AcceptedDTO, *RejectedDTO, bool, error) {
+func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*noteBatchState, *AcceptedDTO, *RejectedDTO, bool, error) {
 	if processed, err := tx.FindProcessedOperation(ctx, deviceID, op.OperationID); err == nil {
 		// A retry returns the original accepted result and does not mutate state
 		// again.
@@ -68,7 +68,7 @@ func (s *Service) applyOperation(ctx context.Context, tx *store.Store, ownerID u
 	}
 }
 
-func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, true); err != nil {
 		rejected := RejectedInvalid(op, err.Error())
@@ -85,7 +85,7 @@ func (s *Service) createCategory(ctx context.Context, tx *store.Store, ownerID u
 	return &accepted, nil, nil
 }
 
-func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, false); err != nil {
 		rejected := RejectedInvalid(op, err.Error())
@@ -108,7 +108,7 @@ func (s *Service) deleteCategory(ctx context.Context, tx *store.Store, ownerID u
 	return &accepted, nil, nil
 }
 
-func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyCategory(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var category Category
 	if err := category.FromRequest(op.ChangeData, true); err != nil {
 		rejected := RejectedInvalid(op, err.Error())

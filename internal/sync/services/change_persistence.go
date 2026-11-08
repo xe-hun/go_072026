@@ -8,7 +8,7 @@ import (
 )
 
 // insertChange writes the append-only history row for an accepted operation.
-func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
+func (s *Service) insertChange(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, op ClientOperation, blockID *uuid.UUID, baseNoteVersion, resultingNoteVersion int64) (store.NoteChange, error) {
 	params, err := op.Entity(ownerID, deviceID, blockID, baseNoteVersion, resultingNoteVersion)
 	if err != nil {
 		return store.NoteChange{}, err

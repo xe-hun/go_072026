@@ -2,13 +2,14 @@ package devices
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // RegisterDeviceRequest is the JSON body for POST /v1/devices.
 type RegisterDeviceRequest struct {
-	// DeviceID is the stable identifier supplied by the client. It must be at
-	// most 30 characters long.
-	DeviceID string `json:"deviceId"`
+	// DeviceID is the UUID supplied by the client.
+	DeviceID uuid.UUID `json:"deviceId"`
 	// DeviceName is an optional human-readable label.
 	DeviceName *string `json:"deviceName,omitempty"`
 	// Platform identifies the client platform, for example ios, android, or web.
@@ -21,8 +22,8 @@ type RegisterDeviceRequest struct {
 
 // DeviceResponse is the API-safe representation of a sync device.
 type DeviceResponse struct {
-	// ID is the client-supplied device identifier used by sync requests.
-	ID string `json:"id"`
+	// ID is the device UUID used by sync requests.
+	ID uuid.UUID `json:"id"`
 	// DeviceName mirrors the optional display name supplied at registration.
 	DeviceName *string `json:"deviceName,omitempty"`
 	// Platform mirrors the optional platform supplied at registration.
@@ -31,10 +32,7 @@ type DeviceResponse struct {
 	AppVersion *string `json:"appVersion,omitempty"`
 	// ProtocolVersion is the sync protocol this device registered with.
 	ProtocolVersion int32 `json:"protocolVersion"`
-	// LastGlobalCursor is the furthest global change sequence observed by this
-	// device.
-	LastGlobalCursor int64 `json:"lastGlobalCursor"`
-	// LastSeenAt is refreshed by sync and cursor updates.
+	// LastSeenAt is refreshed by sync.
 	LastSeenAt time.Time `json:"lastSeenAt"`
 	// CreatedAt records registration time.
 	CreatedAt time.Time `json:"createdAt"`

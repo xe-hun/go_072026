@@ -47,13 +47,13 @@ func (s *Service) Pull(ctx context.Context, ownerID uuid.UUID, req PullRequest) 
 			resp.Changes = append(resp.Changes, pulled)
 		}
 		resp.NextCursor = nextCursor(req.Cursor, resp.Changes)
-		return tx.UpdateDeviceCursor(ctx, req.DeviceID, ownerID, resp.NextCursor)
+		return tx.TouchDevice(ctx, req.DeviceID, ownerID)
 	})
 	return resp, err
 }
 
-// UpdatesAvailable reports whether a device has remote changes after its
-// persisted sync cursor.
+// UpdatesAvailable reports whether a device has remote changes after the
+// cursor supplied by the client.
 func (s *Service) UpdatesAvailable(ctx context.Context, ownerID uuid.UUID, req UpdatesAvailableRequest) (UpdatesAvailableResponse, error) {
 	if err := req.Validate(); err != nil {
 		return UpdatesAvailableResponse{}, err
@@ -68,7 +68,7 @@ func (s *Service) UpdatesAvailable(ctx context.Context, ownerID uuid.UUID, req U
 	if device.RevokedAt.Valid {
 		return UpdatesAvailableResponse{}, httpapi.NewError(http.StatusForbidden, httpapi.CodeDeviceRevoked, "Device has been revoked.")
 	}
-	available, err := s.store.HasChangesAfterCursor(ctx, ownerID, device.LastGlobalCursor, req.DeviceID)
+	available, err := s.store.HasChangesAfterCursor(ctx, ownerID, req.Cursor, req.DeviceID)
 	if err != nil {
 		return UpdatesAvailableResponse{}, err
 	}

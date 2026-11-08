@@ -66,7 +66,12 @@ func (h *Handler) DownloadLinks(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyCursor+" must be an integer."))
 		return
 	}
-	response, err := h.service.DownloadURLs(r.Context(), ownerID, query.Get(constants.RequestKeyDeviceID), cursor)
+	deviceID, err := uuid.Parse(query.Get(constants.RequestKeyDeviceID))
+	if err != nil || deviceID == uuid.Nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyDeviceID+" must be a valid UUID."))
+		return
+	}
+	response, err := h.service.DownloadURLs(r.Context(), ownerID, deviceID, cursor)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return

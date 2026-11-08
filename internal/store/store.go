@@ -15,8 +15,8 @@ var ErrNotFound = errors.New("not found")
 
 // SyncDevice mirrors a row in sync_devices after conversion from sqlc types.
 type SyncDevice struct {
-	// ID is the client-supplied device identifier used by sync requests.
-	ID string
+	// DeviceID is the UUID used by sync requests.
+	DeviceID uuid.UUID
 	// OwnerID scopes the device to one authenticated user.
 	OwnerID uuid.UUID
 	// DeviceName is nullable because clients may register anonymously named
@@ -28,10 +28,8 @@ type SyncDevice struct {
 	AppVersion pgtype.Text
 	// ProtocolVersion records the sync protocol supported by this device.
 	ProtocolVersion int32
-	// LastGlobalCursor stores the largest global sequence observed by the device.
-	LastGlobalCursor int64
-	LastSeenAt       time.Time
-	CreatedAt        time.Time
+	LastSeenAt      time.Time
+	CreatedAt       time.Time
 	// RevokedAt is valid after the device is revoked.
 	RevokedAt pgtype.Timestamptz
 }
@@ -84,8 +82,8 @@ type NoteChange struct {
 	NoteID uuid.UUID
 	// BlockID is nullable for note-level operations.
 	BlockID pgtype.UUID
-	// DeviceID identifies the device that submitted the operation.
-	DeviceID string
+	// DeviceID identifies the UUID of the device that submitted the operation.
+	DeviceID uuid.UUID
 	// ClientOperationID is the stable operation UUID used for idempotency.
 	ClientOperationID uuid.UUID
 	// OperationType is the concrete operation, for example modify_block.
@@ -159,7 +157,7 @@ type FileUpload struct {
 	OwnerID             uuid.UUID
 	BlockID             uuid.UUID
 	Cursor              int64
-	DeviceID            string
+	DeviceID            pgtype.UUID
 	OriginalFilename    string
 	StorageBucket       string
 	StoragePath         string
@@ -177,8 +175,8 @@ type FileUpload struct {
 
 // CreateDeviceParams is the store input for inserting a sync device.
 type CreateDeviceParams struct {
-	// ID is supplied by the client.
-	ID string
+	// DeviceID is supplied by the client.
+	DeviceID uuid.UUID
 	// OwnerID is the authenticated user.
 	OwnerID uuid.UUID
 	// DeviceName, Platform, and AppVersion are optional metadata.
@@ -195,7 +193,7 @@ type InsertNoteChangeParams struct {
 	OwnerID           uuid.UUID
 	NoteID            *uuid.UUID
 	BlockID           *uuid.UUID
-	DeviceID          string
+	DeviceID          uuid.UUID
 	ClientOperationID uuid.UUID
 	OperationType     string
 	// Base/resulting versions are copied into history for conflict diagnostics

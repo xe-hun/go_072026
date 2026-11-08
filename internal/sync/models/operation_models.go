@@ -167,11 +167,11 @@ func (m *Operation) FromRequest(request ClientOperation) error {
 
 // Entity converts a client operation into its append-only change entity after
 // the service has supplied authenticated and versioning context.
-func (op ClientOperation) Entity(ownerID uuid.UUID, deviceID string, blockID *uuid.UUID, baseVersion, resultingVersion int64) (store.InsertNoteChangeParams, error) {
+func (op ClientOperation) Entity(ownerID uuid.UUID, deviceID uuid.UUID, blockID *uuid.UUID, baseVersion, resultingVersion int64) (store.InsertNoteChangeParams, error) {
 	if err := op.Validate(); err != nil {
 		return store.InsertNoteChangeParams{}, err
 	}
-	if ownerID == uuid.Nil || !constants.ValidDeviceID(deviceID) {
+	if ownerID == uuid.Nil || deviceID == uuid.Nil {
 		return store.InsertNoteChangeParams{}, errors.New("owner and device identifiers are required")
 	}
 	if (op.OperationType == OperationCreateBlock || op.OperationType == OperationDeleteBlock || op.OperationType == OperationModifyBlock) && (blockID == nil || *blockID == uuid.Nil) {

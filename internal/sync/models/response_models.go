@@ -4,14 +4,13 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	constants "notes-server/internal"
 	"notes-server/internal/store"
 	"time"
 )
 
 // FromEntity maps a persistence change into the pulled-change response.
 func (c *PulledChange) FromEntity(entity store.NoteChange) error {
-	if entity.ID == uuid.Nil || entity.ClientOperationID == uuid.Nil || !constants.ValidDeviceID(entity.DeviceID) {
+	if entity.ID == uuid.Nil || entity.ClientOperationID == uuid.Nil || entity.DeviceID == uuid.Nil {
 		return errors.New("change entity must contain valid identifiers")
 	}
 	*c = PulledChange{

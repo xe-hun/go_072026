@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	constants "notes-server/internal"
@@ -50,12 +51,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceID := r.URL.Query().Get(constants.RequestKeyDeviceID)
-	if !constants.ValidDeviceID(deviceID) {
-		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyDeviceID+" must be a registered device identifier."))
+	parsedDeviceID, err := uuid.Parse(deviceID)
+	if err != nil || parsedDeviceID == uuid.Nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyDeviceID+" must be a valid UUID."))
 		return
 	}
 
-	device, err := h.store.GetDeviceForOwner(r.Context(), deviceID, userID)
+	device, err := h.store.GetDeviceForOwner(r.Context(), parsedDeviceID, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httpapi.WriteError(w, r, httpapi.Forbidden("Device does not belong to the authenticated user."))
@@ -79,7 +81,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn.EnableWriteCompression(false)
-	client := NewClient(userID, deviceID, conn)
+	client := NewClient(userID, parsedDeviceID, conn)
 	if err := h.hub.Register(client); err != nil {
 		client.Close()
 		h.logger.Warn("websocket registration failed",

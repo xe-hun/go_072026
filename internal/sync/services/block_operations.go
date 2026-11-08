@@ -11,7 +11,7 @@ import (
 )
 
 // batch when a later operation targets it.
-func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var blockModel BlockModel
 	if err := blockModel.FromCreateOperation(op.ChangeData); err != nil {
 		rejected := RejectedInvalid(op, err.Error())
@@ -49,7 +49,7 @@ func (s *Service) createBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &block.ID)
 }
 
-func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationDeleteBlock); err != nil {
 		rejected := RejectedInvalid(op, err.Error())
@@ -81,7 +81,7 @@ func (s *Service) deleteBlock(ctx context.Context, tx *store.Store, ownerID uuid
 	return s.acceptOperationChange(ctx, tx, ownerID, deviceID, state.note, op, &blockID)
 }
 
-func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) modifyBlock(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, state *noteBatchState, op ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	var mutation BlockMutation
 	if err := mutation.FromRequest(op.ChangeData, OperationModifyBlock); err != nil {
 		rejected := RejectedInvalid(op, err.Error())

@@ -11,9 +11,9 @@ import (
 
 // FindProcessedOperation looks up an operation by the idempotency key
 // (device_id, client_operation_id).
-func (s *Store) FindProcessedOperation(ctx context.Context, deviceID string, operationID uuid.UUID) (NoteChange, error) {
+func (s *Store) FindProcessedOperation(ctx context.Context, deviceID uuid.UUID, operationID uuid.UUID) (NoteChange, error) {
 	change, err := s.q.FindProcessedOperation(ctx, db.FindProcessedOperationParams{
-		DeviceID:          deviceID,
+		DeviceID:          pgUUID(deviceID),
 		ClientOperationID: pgUUID(operationID),
 	})
 	return fromDBChange(change), mapNoRows(err)
@@ -35,7 +35,7 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 		OwnerID:              pgUUID(arg.OwnerID),
 		NoteID:               noteID,
 		BlockID:              blockID,
-		DeviceID:             arg.DeviceID,
+		DeviceID:             pgUUID(arg.DeviceID),
 		ClientOperationID:    pgUUID(arg.ClientOperationID),
 		OperationType:        arg.OperationType,
 		BaseNoteVersion:      arg.BaseNoteVersion,
@@ -49,11 +49,11 @@ func (s *Store) InsertNoteChange(ctx context.Context, arg InsertNoteChangeParams
 
 // GetChangesAfterCursor returns remote changes after a cursor, excluding changes
 // submitted by the requesting device.
-func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID string, limit int32) ([]NoteChange, error) {
+func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID uuid.UUID, limit int32) ([]NoteChange, error) {
 	rows, err := s.q.GetChangesAfterCursor(ctx, db.GetChangesAfterCursorParams{
 		OwnerID:        pgUUID(ownerID),
 		GlobalSequence: pgtype.Int8{Int64: cursor, Valid: true},
-		DeviceID:       excludeDeviceID,
+		DeviceID:       pgUUID(excludeDeviceID),
 		Limit:          limit,
 	})
 	if err != nil {
@@ -68,11 +68,11 @@ func (s *Store) GetChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cu
 
 // HasChangesAfterCursor reports whether remote changes exist after a device's
 // cursor for one owner.
-func (s *Store) HasChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID string) (bool, error) {
+func (s *Store) HasChangesAfterCursor(ctx context.Context, ownerID uuid.UUID, cursor int64, excludeDeviceID uuid.UUID) (bool, error) {
 	return s.q.HasChangesAfterCursor(ctx, db.HasChangesAfterCursorParams{
 		OwnerID:        pgUUID(ownerID),
 		GlobalSequence: pgtype.Int8{Int64: cursor, Valid: true},
-		DeviceID:       excludeDeviceID,
+		DeviceID:       pgUUID(excludeDeviceID),
 	})
 }
 

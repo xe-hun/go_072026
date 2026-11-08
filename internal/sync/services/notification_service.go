@@ -7,7 +7,7 @@ import (
 )
 
 // the result of the already-committed sync transaction.
-func (s *Service) publishCommittedSyncAvailable(ctx context.Context, ownerID uuid.UUID, deviceID string, latestCursor int64) {
+func (s *Service) publishCommittedSyncAvailable(ctx context.Context, ownerID uuid.UUID, deviceID uuid.UUID, latestCursor int64) {
 	if latestCursor <= 0 || s.eventBus == nil {
 		return
 	}

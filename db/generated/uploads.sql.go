@@ -100,7 +100,7 @@ type CreateFileUploadParams struct {
 	ContentType      string             `json:"content_type"`
 	ExpectedSize     int64              `json:"expected_size"`
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	DeviceID         pgtype.Text        `json:"device_id"`
+	DeviceID         pgtype.UUID        `json:"device_id"`
 }
 
 func (q *Queries) CreateFileUpload(ctx context.Context, arg CreateFileUploadParams) (FileUpload, error) {

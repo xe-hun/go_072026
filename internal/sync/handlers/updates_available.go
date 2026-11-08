@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	constants "notes-server/internal"
 	"notes-server/internal/auth"
 	"notes-server/internal/httpapi"
@@ -23,9 +25,20 @@ func (h *Handler) UpdatesAvailable(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyProtocolVersion+" must be an integer."))
 		return
 	}
+	cursor, err := strconv.ParseInt(query.Get(constants.RequestKeyCursor), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyCursor+" must be an integer."))
+		return
+	}
+	deviceID, err := uuid.Parse(query.Get(constants.RequestKeyDeviceID))
+	if err != nil || deviceID == uuid.Nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyDeviceID+" must be a valid UUID."))
+		return
+	}
 	resp, err := h.service.UpdatesAvailable(r.Context(), ownerID, syncapi.UpdatesAvailableRequest{
 		ProtocolVersion: protocolVersion,
-		DeviceID:        query.Get(constants.RequestKeyDeviceID),
+		DeviceID:        deviceID,
+		Cursor:          cursor,
 	})
 	if err != nil {
 		httpapi.WriteError(w, r, err)

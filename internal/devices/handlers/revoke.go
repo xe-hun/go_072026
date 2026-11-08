@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	constants "notes-server/internal"
 	"notes-server/internal/auth"
@@ -17,7 +18,12 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Unauthorized())
 		return
 	}
-	if err := h.service.Revoke(r.Context(), ownerID, chi.URLParam(r, constants.RequestKeyDeviceID)); err != nil {
+	deviceID, err := uuid.Parse(chi.URLParam(r, constants.RequestKeyDeviceID))
+	if err != nil || deviceID == uuid.Nil {
+		httpapi.WriteError(w, r, httpapi.InvalidRequest(constants.RequestKeyDeviceID+" must be a valid UUID."))
+		return
+	}
+	if err := h.service.Revoke(r.Context(), ownerID, deviceID); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}

@@ -36,7 +36,7 @@ type FileUpload struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	Cursor              pgtype.Int8        `json:"cursor"`
-	DeviceID            pgtype.Text        `json:"device_id"`
+	DeviceID            pgtype.UUID        `json:"device_id"`
 }
 
 type Note struct {
@@ -67,7 +67,7 @@ type NoteChange struct {
 	OwnerID              pgtype.UUID        `json:"owner_id"`
 	NoteID               pgtype.UUID        `json:"note_id"`
 	BlockID              pgtype.UUID        `json:"block_id"`
-	DeviceID             string             `json:"device_id"`
+	DeviceID             pgtype.UUID        `json:"device_id"`
 	ClientOperationID    pgtype.UUID        `json:"client_operation_id"`
 	OperationType        string             `json:"operation_type"`
 	BaseNoteVersion      int64              `json:"base_note_version"`
@@ -106,14 +106,13 @@ type OutboxJob struct {
 }
 
 type SyncDevice struct {
-	ID               string             `json:"id"`
-	OwnerID          pgtype.UUID        `json:"owner_id"`
-	DeviceName       pgtype.Text        `json:"device_name"`
-	Platform         pgtype.Text        `json:"platform"`
-	AppVersion       pgtype.Text        `json:"app_version"`
-	ProtocolVersion  int32              `json:"protocol_version"`
-	LastGlobalCursor int64              `json:"last_global_cursor"`
-	LastSeenAt       pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	RevokedAt        pgtype.Timestamptz `json:"revoked_at"`
+	DeviceID        pgtype.UUID        `json:"device_id"`
+	OwnerID         pgtype.UUID        `json:"owner_id"`
+	DeviceName      pgtype.Text        `json:"device_name"`
+	Platform        pgtype.Text        `json:"platform"`
+	AppVersion      pgtype.Text        `json:"app_version"`
+	ProtocolVersion int32              `json:"protocol_version"`
+	LastSeenAt      pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
 }

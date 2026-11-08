@@ -119,9 +119,10 @@ Tooling dependencies:
 
 `note_blocks` stores ordered blocks and block-properties JSON. Blocks use string positions for fractional indexing so inserts and moves usually update only one row.
 
-`sync_devices` stores per-user devices keyed by a client-supplied string device
-ID of at most 30 characters, along with protocol version, last seen timestamp,
-revocation timestamp, and last global cursor.
+`sync_devices` stores per-user devices keyed by a client-supplied UUID in
+`device_id`, along with protocol version, last seen timestamp, and revocation
+timestamp. Sync cursors are client-owned and are not persisted on the device
+row.
 
 `note_changes` is append-only. Every accepted operation creates exactly one change record with base/resulting versions and a global sequence.
 
@@ -160,7 +161,7 @@ Authenticated routes:
 - `GET /v1/devices`
 - `DELETE /v1/devices/{deviceId}`
 - `POST /v1/sync`
-- `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...`
+- `GET /v1/sync/updates-available?protocolVersion=1&deviceId=...&cursor=...`
 - `GET /v1/notes/{noteId}`
 - `GET /v1/notes/{noteId}/snapshot`
 - `POST /v1/uploads/initiate`
@@ -253,7 +254,7 @@ Services never trust client-supplied owner IDs. They use the authenticated user 
 Device registration:
 
 1. Handler decodes JSON.
-2. Service validates the client-supplied device ID and defaults protocol version to `1`.
+2. Service validates the client-supplied device UUID and defaults protocol version to `1`.
 3. Service rejects unsupported protocol versions.
 4. Store inserts a `sync_devices` row scoped to the authenticated user.
 5. Handler returns the device record.
@@ -325,13 +326,13 @@ The service:
 13. Saves the complete changed note document and increments its version once.
 14. Enqueues snapshot jobs when thresholds are reached.
 15. Pulls remote changes after the client cursor.
-16. Updates the device cursor and last seen timestamp.
+16. Updates the device last-seen timestamp.
 17. Commits the transaction.
 18. Returns accepted and rejected DTOs, pulled changes, next cursor, and pagination state.
 
-Clients can call `GET /v1/sync/updates-available` with a protocol version and
-device ID to check the authenticated user's persisted device cursor without
-pulling change records. The response is `{ "updatesAvailable": true|false }`.
+Clients can call `GET /v1/sync/updates-available` with a protocol version,
+device UUID, and client cursor to check for remote changes without pulling
+change records. The response is `{ "updatesAvailable": true|false }`.
 
 A valid sync request can have both accepted and rejected note batches. These are returned with HTTP `200 OK`. Whole-request errors, such as invalid protocol or revoked device, use normal error responses.
 

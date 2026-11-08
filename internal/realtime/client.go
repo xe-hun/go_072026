@@ -26,7 +26,7 @@ const (
 // routing notifications.
 type Client struct {
 	UserID   uuid.UUID
-	DeviceID string
+	DeviceID uuid.UUID
 	Conn     *websocket.Conn
 	Send     chan Message
 
@@ -38,7 +38,7 @@ type Client struct {
 }
 
 // NewClient creates a bounded WebSocket client state object.
-func NewClient(userID uuid.UUID, deviceID string, conn *websocket.Conn) *Client {
+func NewClient(userID uuid.UUID, deviceID uuid.UUID, conn *websocket.Conn) *Client {
 	return &Client{
 		UserID:     userID,
 		DeviceID:   deviceID,

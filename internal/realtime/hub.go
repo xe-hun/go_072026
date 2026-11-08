@@ -15,7 +15,7 @@ var errHubClosed = errors.New("realtime hub is closed")
 // and makes the hot path a short map lookup plus bounded channel sends.
 type Hub struct {
 	mu      sync.RWMutex
-	clients map[uuid.UUID]map[string]*Client
+	clients map[uuid.UUID]map[uuid.UUID]*Client
 	closed  bool
 	wg      sync.WaitGroup
 	logger  *slog.Logger
@@ -27,7 +27,7 @@ func NewHub(logger *slog.Logger) *Hub {
 		logger = slog.Default()
 	}
 	return &Hub{
-		clients: make(map[uuid.UUID]map[string]*Client),
+		clients: make(map[uuid.UUID]map[uuid.UUID]*Client),
 		logger:  logger,
 	}
 }
@@ -35,7 +35,7 @@ func NewHub(logger *slog.Logger) *Hub {
 // Register adds a client. A second connection for the same user/device
 // replaces the old one, preventing duplicate notifications after reconnects.
 func (h *Hub) Register(client *Client) error {
-	if client == nil || client.UserID == uuid.Nil || client.DeviceID == "" {
+	if client == nil || client.UserID == uuid.Nil || client.DeviceID == uuid.Nil {
 		return errors.New("realtime client identity is invalid")
 	}
 
@@ -46,7 +46,7 @@ func (h *Hub) Register(client *Client) error {
 	}
 	userClients := h.clients[client.UserID]
 	if userClients == nil {
-		userClients = make(map[string]*Client)
+		userClients = make(map[uuid.UUID]*Client)
 		h.clients[client.UserID] = userClients
 	}
 	previous := userClients[client.DeviceID]
@@ -161,7 +161,7 @@ func (h *Hub) Close() {
 			clients = append(clients, client)
 		}
 	}
-	h.clients = make(map[uuid.UUID]map[string]*Client)
+	h.clients = make(map[uuid.UUID]map[uuid.UUID]*Client)
 	h.mu.Unlock()
 
 	for _, client := range clients {

@@ -18,7 +18,7 @@ func (s *Store) CreateFileUpload(ctx context.Context, upload FileUpload) (FileUp
 		NoteID:           pgUUID(upload.NoteID),
 		OwnerID:          pgUUID(upload.OwnerID),
 		BlockID:          pgUUID(upload.BlockID),
-		DeviceID:         pgtype.Text{String: upload.DeviceID, Valid: upload.DeviceID != ""},
+		DeviceID:         upload.DeviceID,
 		OriginalFilename: upload.OriginalFilename,
 		StorageBucket:    upload.StorageBucket,
 		StoragePath:      upload.StoragePath,

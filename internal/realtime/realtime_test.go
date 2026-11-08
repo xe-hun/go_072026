@@ -20,14 +20,14 @@ func testHub() *Hub {
 	return NewHub(slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-func testClient(userID uuid.UUID, deviceID string) *Client {
+func testClient(userID uuid.UUID, deviceID uuid.UUID) *Client {
 	return NewClient(userID, deviceID, nil)
 }
 
 func TestHubRegistersAndRemovesClients(t *testing.T) {
 	hub := testHub()
 	userID := uuid.New()
-	client := testClient(userID, "phone")
+	client := testClient(userID, uuid.New())
 
 	if err := hub.Register(client); err != nil {
 		t.Fatal(err)
@@ -52,9 +52,9 @@ func TestHubNotifiesSameUserAndExcludesOrigin(t *testing.T) {
 	hub := testHub()
 	userID := uuid.New()
 	otherUserID := uuid.New()
-	origin := testClient(userID, "phone")
-	otherDevice := testClient(userID, "tablet")
-	unrelated := testClient(otherUserID, "tablet")
+	origin := testClient(userID, uuid.New())
+	otherDevice := testClient(userID, uuid.New())
+	unrelated := testClient(otherUserID, uuid.New())
 	for _, client := range []*Client{origin, otherDevice, unrelated} {
 		if err := hub.Register(client); err != nil {
 			t.Fatal(err)
@@ -82,7 +82,8 @@ func TestHubNotifiesSameUserAndExcludesOrigin(t *testing.T) {
 func TestHubCoalescesPendingNotifications(t *testing.T) {
 	hub := testHub()
 	userID := uuid.New()
-	client := testClient(userID, "tablet")
+	client := testClient(userID, uuid.New())
+	originDeviceID := uuid.New()
 	if err := hub.Register(client); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +91,7 @@ func TestHubCoalescesPendingNotifications(t *testing.T) {
 	for _, cursor := range []int64{8421, 8422, 8423, 8425, 8424} {
 		hub.PublishSyncAvailable(SyncAvailableEvent{
 			UserID:         userID,
-			OriginDeviceID: "phone",
+			OriginDeviceID: originDeviceID,
 			LatestCursor:   cursor,
 		})
 	}
@@ -107,7 +108,8 @@ func TestHubCoalescesPendingNotifications(t *testing.T) {
 func TestHubDisconnectsClientWhenQueueCannotBeCoalesced(t *testing.T) {
 	hub := testHub()
 	userID := uuid.New()
-	client := testClient(userID, "tablet")
+	client := testClient(userID, uuid.New())
+	originDeviceID := uuid.New()
 	if err := hub.Register(client); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func TestHubDisconnectsClientWhenQueueCannotBeCoalesced(t *testing.T) {
 
 	hub.PublishSyncAvailable(SyncAvailableEvent{
 		UserID:         userID,
-		OriginDeviceID: "phone",
+		OriginDeviceID: originDeviceID,
 		LatestCursor:   8425,
 	})
 	if got := hub.ConnectionCount(); got != 0 {
@@ -139,9 +141,9 @@ func TestSyncAvailableMessagePayload(t *testing.T) {
 func TestDecodeSyncAvailableEventRejectsMalformedPayloads(t *testing.T) {
 	payloads := []string{"not-json"}
 	for _, event := range []SyncAvailableEvent{
-		{UserID: uuid.Nil, OriginDeviceID: "phone", LatestCursor: 1},
-		{UserID: uuid.New(), OriginDeviceID: "", LatestCursor: 1},
-		{UserID: uuid.New(), OriginDeviceID: "phone", LatestCursor: -1},
+		{UserID: uuid.Nil, OriginDeviceID: uuid.New(), LatestCursor: 1},
+		{UserID: uuid.New(), OriginDeviceID: uuid.Nil, LatestCursor: 1},
+		{UserID: uuid.New(), OriginDeviceID: uuid.New(), LatestCursor: -1},
 	} {
 		raw, err := json.Marshal(event)
 		if err != nil {
@@ -205,7 +207,7 @@ func TestHubCloseStopsWebSocketLoops(t *testing.T) {
 	serverConn := <-serverConnection
 
 	hub := testHub()
-	client := NewClient(uuid.New(), "phone", serverConn)
+	client := NewClient(uuid.New(), uuid.New(), serverConn)
 	if err := hub.Register(client); err != nil {
 		t.Fatal(err)
 	}

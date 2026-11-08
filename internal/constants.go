@@ -1,13 +1,7 @@
 // Package constants defines shared protocol identifiers used by the server.
 package constants
 
-import "unicode/utf8"
-
 const (
-	// DeviceIDMaxLength is the maximum number of Unicode characters allowed in
-	// a client-supplied device identifier.
-	DeviceIDMaxLength = 30
-
 	RequestKeyConflict = "note_conflict"
 
 	//commonkeys
@@ -81,9 +75,3 @@ const (
 	// diffs.
 	ChangeFormatStructuredV1 = "structured-operation-v1"
 )
-
-// ValidDeviceID reports whether a device identifier is non-empty and within
-// the protocol's maximum length.
-func ValidDeviceID(value string) bool {
-	return value != "" && utf8.RuneCountInString(value) <= DeviceIDMaxLength
-}

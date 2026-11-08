@@ -28,8 +28,8 @@ func (r *fakeRepository) ValidateUploadTarget(context.Context, uuid.UUID, uuid.U
 	return nil
 }
 
-func (r *fakeRepository) GetDeviceForOwner(_ context.Context, deviceID string, ownerID uuid.UUID) (store.SyncDevice, error) {
-	return store.SyncDevice{ID: deviceID, OwnerID: ownerID}, nil
+func (r *fakeRepository) GetDeviceForOwner(_ context.Context, deviceID uuid.UUID, ownerID uuid.UUID) (store.SyncDevice, error) {
+	return store.SyncDevice{DeviceID: deviceID, OwnerID: ownerID}, nil
 }
 
 func (r *fakeRepository) CountPendingFileUploads(_ context.Context, ownerID uuid.UUID) (int64, error) {
@@ -197,7 +197,7 @@ func TestInitiateCreatesPendingRecordAndUniquePath(t *testing.T) {
 	storageClient := &fakeStorage{signed: storage.SignedUpload{URL: "https://storage.test/upload", Token: "secret-token"}}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	request := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
+	request := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
 	response, err := service.Initiate(context.Background(), ownerID, request)
 	if err != nil {
 		t.Fatal(err)
@@ -222,7 +222,7 @@ func TestCompleteVerifiesMetadataAndIsIdempotent(t *testing.T) {
 	}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
+	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestCompleteRejectsMetadataMismatch(t *testing.T) {
 	storageClient := &fakeStorage{info: storage.ObjectInfo{Size: 99, ContentType: "application/pdf"}}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
+	initResponse, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestCompleteRejectsMetadataMismatch(t *testing.T) {
 func TestInitiateRejectsUnsafeOrUnsupportedMetadata(t *testing.T) {
 	repository := newFakeRepository()
 	service := NewService(repository, &fakeStorage{}, testConfig())
-	base := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
+	base := InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: uuid.New(), Filename: "document.pdf", ContentType: "application/pdf", Size: 12}
 	invalid := []InitiateRequest{
 		{NoteID: base.NoteID, BlockID: base.BlockID, Filename: "document.pdf", ContentType: "application/pdf", Size: 0},
 		{NoteID: base.NoteID, BlockID: base.BlockID, Filename: "document.pdf", ContentType: "application/pdf", Size: 11 * 1024 * 1024},
@@ -282,25 +282,26 @@ func TestDownloadURLsSkipsPendingAndOwnDeviceUploads(t *testing.T) {
 	}
 	service := NewService(repository, storageClient, testConfig())
 	ownerID := uuid.New()
-	phoneUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "phone", Filename: "phone.pdf", ContentType: "application/pdf", Size: 12})
+	phoneDevice := uuid.New()
+	phoneUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: phoneDevice, Filename: "phone.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Complete(context.Background(), ownerID, phoneUpload.UploadID); err != nil {
 		t.Fatal(err)
 	}
-	pendingUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "laptop", Filename: "pending.pdf", ContentType: "application/pdf", Size: 12})
+	pendingUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: uuid.New(), Filename: "pending.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
-	readyUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: "tablet", Filename: "ready.pdf", ContentType: "application/pdf", Size: 12})
+	readyUpload, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: uuid.New(), BlockID: uuid.New(), DeviceID: uuid.New(), Filename: "ready.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Complete(context.Background(), ownerID, readyUpload.UploadID); err != nil {
 		t.Fatal(err)
 	}
-	response, err := service.DownloadURLs(context.Background(), ownerID, "phone", 0)
+	response, err := service.DownloadURLs(context.Background(), ownerID, phoneDevice, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,14 +320,15 @@ func TestDownloadURLUsesLatestUploadForBlock(t *testing.T) {
 	ownerID := uuid.New()
 	noteID := uuid.New()
 	blockID := uuid.New()
-	first, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: noteID, BlockID: blockID, DeviceID: "phone", Filename: "first.pdf", ContentType: "application/pdf", Size: 12})
+	deviceID := uuid.New()
+	first, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: noteID, BlockID: blockID, DeviceID: deviceID, Filename: "first.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Complete(context.Background(), ownerID, first.UploadID); err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: noteID, BlockID: blockID, DeviceID: "phone", Filename: "second.pdf", ContentType: "application/pdf", Size: 12})
+	second, err := service.Initiate(context.Background(), ownerID, InitiateRequest{NoteID: noteID, BlockID: blockID, DeviceID: deviceID, Filename: "second.pdf", ContentType: "application/pdf", Size: 12})
 	if err != nil {
 		t.Fatal(err)
 	}

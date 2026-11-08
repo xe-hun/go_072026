@@ -79,7 +79,7 @@ func (b *noteBatchState) ensureBlock(ctx context.Context, tx *store.Store, noteI
 // applyOperationBatch applies all operations for one note under a savepoint.
 // Direct create/delete operations are written immediately; targeted edits are
 // kept in noteBatchState until the batch has been accepted.
-func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID string, operations []ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
+func (s *Service) applyOperationBatch(ctx context.Context, tx *store.Store, ownerID uuid.UUID, deviceID uuid.UUID, operations []ClientOperation) (*AcceptedDTO, *RejectedDTO, error) {
 	if len(operations) == 0 {
 		return nil, nil, nil
 	}

@@ -37,16 +37,15 @@ func pgTime(value time.Time) pgtype.Timestamptz {
 // services.
 func fromDBDevice(value db.SyncDevice) SyncDevice {
 	return SyncDevice{
-		ID:               value.ID,
-		OwnerID:          uuid.UUID(value.OwnerID.Bytes),
-		DeviceName:       value.DeviceName,
-		Platform:         value.Platform,
-		AppVersion:       value.AppVersion,
-		ProtocolVersion:  value.ProtocolVersion,
-		LastGlobalCursor: value.LastGlobalCursor,
-		LastSeenAt:       value.LastSeenAt.Time,
-		CreatedAt:        value.CreatedAt.Time,
-		RevokedAt:        value.RevokedAt,
+		DeviceID:        uuid.UUID(value.DeviceID.Bytes),
+		OwnerID:         uuid.UUID(value.OwnerID.Bytes),
+		DeviceName:      value.DeviceName,
+		Platform:        value.Platform,
+		AppVersion:      value.AppVersion,
+		ProtocolVersion: value.ProtocolVersion,
+		LastSeenAt:      value.LastSeenAt.Time,
+		CreatedAt:       value.CreatedAt.Time,
+		RevokedAt:       value.RevokedAt,
 	}
 }
 
@@ -91,7 +90,7 @@ func fromDBChange(value db.NoteChange) NoteChange {
 		OwnerID:              uuid.UUID(value.OwnerID.Bytes),
 		NoteID:               uuid.UUID(value.NoteID.Bytes),
 		BlockID:              value.BlockID,
-		DeviceID:             value.DeviceID,
+		DeviceID:             uuid.UUID(value.DeviceID.Bytes),
 		ClientOperationID:    uuid.UUID(value.ClientOperationID.Bytes),
 		OperationType:        value.OperationType,
 		BaseNoteVersion:      value.BaseNoteVersion,
@@ -143,7 +142,7 @@ func fromDBFileUpload(value db.FileUpload) FileUpload {
 		OwnerID:             uuid.UUID(value.OwnerID.Bytes),
 		BlockID:             uuid.UUID(value.BlockID.Bytes),
 		Cursor:              value.Cursor.Int64,
-		DeviceID:            value.DeviceID.String,
+		DeviceID:            value.DeviceID,
 		OriginalFilename:    value.OriginalFilename,
 		StorageBucket:       value.StorageBucket,
 		StoragePath:         value.StoragePath,
