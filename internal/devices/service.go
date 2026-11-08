@@ -33,6 +33,11 @@ func (s *Service) Register(ctx context.Context, ownerID uuid.UUID, req RegisterD
 	if err != nil {
 		return DeviceResponse{}, err
 	}
+	existingNames, err := s.store.ListDeviceNamesByIdentifier(ctx, params.DeviceIdentifier)
+	if err != nil {
+		return DeviceResponse{}, err
+	}
+	params.DeviceName = nextDeviceName(params.DeviceName, existingNames)
 	device, err := s.store.CreateDevice(ctx, params)
 	if err != nil {
 		return DeviceResponse{}, err

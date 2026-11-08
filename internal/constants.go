@@ -1,6 +1,8 @@
 // Package constants defines shared protocol identifiers used by the server.
 package constants
 
+import "unicode/utf8"
+
 const (
 	RequestKeyConflict = "note_conflict"
 
@@ -11,17 +13,20 @@ const (
 
 	// Request field names. Keep these values together so request parsing,
 	// validation, and debugging use one canonical spelling.
-	RequestKeyProtocolVersion = "protocolVersion"
-	RequestKeyClientVersion   = "clientVersion"
-	RequestKeyDeviceID        = "deviceId"
-	RequestKeyOperations      = "operations"
-	RequestKeyOperationID     = "operationId"
-	RequestKeyOperationType   = "operationType"
-	RequestKeyChangeFormat    = "changeFormat"
-	RequestKeyCursor          = "cursor"
-	RequestKeyDeviceName      = "deviceName"
-	RequestKeyPlatform        = "platform"
-	RequestKeyAppVersion      = "appVersion"
+	RequestKeyProtocolVersion  = "protocolVersion"
+	RequestKeyClientVersion    = "clientVersion"
+	RequestKeyDeviceID         = "deviceId"
+	RequestKeyDeviceIdentifier = "device_identifier"
+	RequestKeyOperations       = "operations"
+	RequestKeyOperationID      = "operationId"
+	RequestKeyOperationType    = "operationType"
+	RequestKeyChangeFormat     = "changeFormat"
+	RequestKeyCursor           = "cursor"
+	RequestKeyDeviceName       = "deviceName"
+	RequestKeyPlatform         = "platform"
+	RequestKeyAppVersion       = "appVersion"
+
+	DeviceIdentifierMaxLength = 100
 
 	// Text delta fields.
 	RequestKeyTextDelta   = "textDelta"
@@ -75,3 +80,9 @@ const (
 	// diffs.
 	ChangeFormatStructuredV1 = "structured-operation-v1"
 )
+
+// ValidDeviceIdentifier reports whether a registration device identifier is
+// present and within the database column's maximum length.
+func ValidDeviceIdentifier(value string) bool {
+	return value != "" && utf8.RuneCountInString(value) <= DeviceIdentifierMaxLength
+}

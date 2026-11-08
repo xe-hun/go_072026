@@ -10,8 +10,10 @@ import (
 type RegisterDeviceRequest struct {
 	// DeviceID is the UUID supplied by the client.
 	DeviceID uuid.UUID `json:"deviceId"`
-	// DeviceName is an optional human-readable label.
-	DeviceName *string `json:"deviceName,omitempty"`
+	// DeviceIdentifier identifies the client installation or hardware.
+	DeviceIdentifier string `json:"deviceIdentifier"`
+	// DeviceName is the required human-readable label.
+	DeviceName *string `json:"deviceName"`
 	// Platform identifies the client platform, for example ios, android, or web.
 	Platform *string `json:"platform,omitempty"`
 	// AppVersion records the client app build/version for diagnostics.
@@ -24,8 +26,10 @@ type RegisterDeviceRequest struct {
 type DeviceResponse struct {
 	// ID is the device UUID used by sync requests.
 	ID uuid.UUID `json:"id"`
-	// DeviceName mirrors the optional display name supplied at registration.
-	DeviceName *string `json:"deviceName,omitempty"`
+	// DeviceIdentifier identifies the client installation or hardware.
+	DeviceIdentifier string `json:"deviceIdentifier"`
+	// DeviceName mirrors the required display name supplied at registration.
+	DeviceName string `json:"deviceName"`
 	// Platform mirrors the optional platform supplied at registration.
 	Platform *string `json:"platform,omitempty"`
 	// AppVersion mirrors the optional app version supplied at registration.

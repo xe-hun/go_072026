@@ -214,7 +214,7 @@ Register a device:
 curl -X POST http://localhost:8080/v1/devices \
   -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
-  -d "{\"deviceId\":\"00000000-0000-4000-8000-000000000001\",\"deviceName\":\"Local Dev\",\"platform\":\"windows\",\"appVersion\":\"1.0.0\",\"protocolVersion\":1}"
+  -d "{\"deviceId\":\"00000000-0000-4000-8000-000000000001\",\"device_identifier\":\"local-dev\",\"deviceName\":\"Local Dev\",\"platform\":\"windows\",\"appVersion\":\"1.0.0\",\"protocolVersion\":1}"
 ```
 
 Save the returned device `id`. It must be a client-supplied UUID and is required

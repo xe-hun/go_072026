@@ -1,11 +1,17 @@
 -- name: CreateDevice :one
 -- Inserts a user-owned sync device and returns its stored state.
 INSERT INTO sync_devices (
-    device_id, owner_id, device_name, platform, app_version, protocol_version
+    device_id, device_identifier, owner_id, device_name, platform, app_version, protocol_version
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 )
 RETURNING *;
+
+-- name: ListDeviceNamesByIdentifier :many
+-- Returns names already used by devices with the same client device identifier.
+SELECT device_name
+FROM sync_devices
+WHERE device_identifier = $1;
 
 -- name: ListDevices :many
 -- Returns all devices for a user, including revoked devices.

@@ -37,15 +37,16 @@ func pgTime(value time.Time) pgtype.Timestamptz {
 // services.
 func fromDBDevice(value db.SyncDevice) SyncDevice {
 	return SyncDevice{
-		DeviceID:        uuid.UUID(value.DeviceID.Bytes),
-		OwnerID:         uuid.UUID(value.OwnerID.Bytes),
-		DeviceName:      value.DeviceName,
-		Platform:        value.Platform,
-		AppVersion:      value.AppVersion,
-		ProtocolVersion: value.ProtocolVersion,
-		LastSeenAt:      value.LastSeenAt.Time,
-		CreatedAt:       value.CreatedAt.Time,
-		RevokedAt:       value.RevokedAt,
+		DeviceID:         uuid.UUID(value.DeviceID.Bytes),
+		DeviceIdentifier: value.DeviceIdentifier,
+		OwnerID:          uuid.UUID(value.OwnerID.Bytes),
+		DeviceName:       value.DeviceName,
+		Platform:         value.Platform,
+		AppVersion:       value.AppVersion,
+		ProtocolVersion:  value.ProtocolVersion,
+		LastSeenAt:       value.LastSeenAt.Time,
+		CreatedAt:        value.CreatedAt.Time,
+		RevokedAt:        value.RevokedAt,
 	}
 }
 

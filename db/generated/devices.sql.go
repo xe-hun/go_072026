@@ -13,26 +13,28 @@ import (
 
 const createDevice = `-- name: CreateDevice :one
 INSERT INTO sync_devices (
-    device_id, owner_id, device_name, platform, app_version, protocol_version
+    device_id, device_identifier, owner_id, device_name, platform, app_version, protocol_version
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 )
-RETURNING device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
+RETURNING device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at, device_identifier
 `
 
 type CreateDeviceParams struct {
-	DeviceID        pgtype.UUID `json:"device_id"`
-	OwnerID         pgtype.UUID `json:"owner_id"`
-	DeviceName      pgtype.Text `json:"device_name"`
-	Platform        pgtype.Text `json:"platform"`
-	AppVersion      pgtype.Text `json:"app_version"`
-	ProtocolVersion int32       `json:"protocol_version"`
+	DeviceID         pgtype.UUID `json:"device_id"`
+	DeviceIdentifier string      `json:"device_identifier"`
+	OwnerID          pgtype.UUID `json:"owner_id"`
+	DeviceName       string      `json:"device_name"`
+	Platform         pgtype.Text `json:"platform"`
+	AppVersion       pgtype.Text `json:"app_version"`
+	ProtocolVersion  int32       `json:"protocol_version"`
 }
 
 // Inserts a user-owned sync device and returns its stored state.
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (SyncDevice, error) {
 	row := q.db.QueryRow(ctx, createDevice,
 		arg.DeviceID,
+		arg.DeviceIdentifier,
 		arg.OwnerID,
 		arg.DeviceName,
 		arg.Platform,
@@ -50,12 +52,13 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Syn
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.DeviceIdentifier,
 	)
 	return i, err
 }
 
 const getDeviceForOwner = `-- name: GetDeviceForOwner :one
-SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
+SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at, device_identifier
 FROM sync_devices
 WHERE device_id = $1
   AND owner_id = $2
@@ -80,12 +83,13 @@ func (q *Queries) GetDeviceForOwner(ctx context.Context, arg GetDeviceForOwnerPa
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.DeviceIdentifier,
 	)
 	return i, err
 }
 
 const getDeviceForOwnerForUpdate = `-- name: GetDeviceForOwnerForUpdate :one
-SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
+SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at, device_identifier
 FROM sync_devices
 WHERE device_id = $1
   AND owner_id = $2
@@ -111,12 +115,40 @@ func (q *Queries) GetDeviceForOwnerForUpdate(ctx context.Context, arg GetDeviceF
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.DeviceIdentifier,
 	)
 	return i, err
 }
 
+const listDeviceNamesByIdentifier = `-- name: ListDeviceNamesByIdentifier :many
+SELECT device_name
+FROM sync_devices
+WHERE device_identifier = $1
+`
+
+// Returns names already used by devices with the same client device identifier.
+func (q *Queries) ListDeviceNamesByIdentifier(ctx context.Context, deviceIdentifier string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDeviceNamesByIdentifier, deviceIdentifier)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var device_name string
+		if err := rows.Scan(&device_name); err != nil {
+			return nil, err
+		}
+		items = append(items, device_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDevices = `-- name: ListDevices :many
-SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at
+SELECT device_id, owner_id, device_name, platform, app_version, protocol_version, last_seen_at, created_at, revoked_at, device_identifier
 FROM sync_devices
 WHERE owner_id = $1
 ORDER BY created_at DESC
@@ -142,6 +174,7 @@ func (q *Queries) ListDevices(ctx context.Context, ownerID pgtype.UUID) ([]SyncD
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.RevokedAt,
+			&i.DeviceIdentifier,
 		); err != nil {
 			return nil, err
 		}

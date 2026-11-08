@@ -120,9 +120,12 @@ Tooling dependencies:
 `note_blocks` stores ordered blocks and block-properties JSON. Blocks use string positions for fractional indexing so inserts and moves usually update only one row.
 
 `sync_devices` stores per-user devices keyed by a client-supplied UUID in
-`device_id`, along with protocol version, last seen timestamp, and revocation
-timestamp. Sync cursors are client-owned and are not persisted on the device
-row.
+`device_id`. Registrations also require a non-empty `device_identifier` of at
+most 100 characters and a device name. When a requested name is not already
+used by that identifier, the service assigns the next numeric suffix such as
+`AndroidDevice-1`. The row also stores protocol version, last seen timestamp,
+and revocation timestamp. Sync cursors are client-owned and are not persisted
+on the device row.
 
 `note_changes` is append-only. Every accepted operation creates exactly one change record with base/resulting versions and a global sequence.
 
@@ -254,10 +257,11 @@ Services never trust client-supplied owner IDs. They use the authenticated user 
 Device registration:
 
 1. Handler decodes JSON.
-2. Service validates the client-supplied device UUID and defaults protocol version to `1`.
+2. Service validates the client-supplied device UUID, required device identifier, and required device name, then defaults protocol version to `1`.
 3. Service rejects unsupported protocol versions.
-4. Store inserts a `sync_devices` row scoped to the authenticated user.
-5. Handler returns the device record.
+4. Service keeps the requested name when it already exists for the same device identifier; otherwise it appends the next numeric suffix.
+5. Store inserts a `sync_devices` row scoped to the authenticated user.
+6. Handler returns the device record.
 
 Device revocation soft-disables a device by setting `revoked_at`. Sync rejects revoked devices with `DEVICE_REVOKED`.
 

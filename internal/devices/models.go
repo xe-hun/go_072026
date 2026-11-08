@@ -2,7 +2,10 @@ package devices
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,17 +16,18 @@ import (
 )
 
 // Device is the device model used between HTTP requests, persistence entities,
-// and API responses. It contains normalized values only.
+// and API responses.
 type Device struct {
-	DeviceID        uuid.UUID
-	OwnerID         uuid.UUID
-	DeviceName      *string
-	Platform        *string
-	AppVersion      *string
-	ProtocolVersion int32
-	LastSeenAt      time.Time
-	CreatedAt       time.Time
-	RevokedAt       *time.Time
+	DeviceID         uuid.UUID
+	DeviceIdentifier string
+	OwnerID          uuid.UUID
+	DeviceName       string
+	Platform         *string
+	AppVersion       *string
+	ProtocolVersion  int32
+	LastSeenAt       time.Time
+	CreatedAt        time.Time
+	RevokedAt        *time.Time
 }
 
 // FromRequest builds a device model from the registration request and applies
@@ -31,6 +35,12 @@ type Device struct {
 func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 	if req.DeviceID == uuid.Nil {
 		return httpapi.InvalidRequest(constants.RequestKeyDeviceID + " is required.")
+	}
+	if !constants.ValidDeviceIdentifier(req.DeviceIdentifier) {
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceIdentifier + " is required and must be 100 characters or fewer.")
+	}
+	if req.DeviceName == nil || *req.DeviceName == "" {
+		return httpapi.InvalidRequest(constants.RequestKeyDeviceName + " is required.")
 	}
 
 	protocolVersion := req.ProtocolVersion
@@ -42,7 +52,8 @@ func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 	}
 
 	m.DeviceID = req.DeviceID
-	m.DeviceName = req.DeviceName
+	m.DeviceIdentifier = req.DeviceIdentifier
+	m.DeviceName = *req.DeviceName
 	m.Platform = req.Platform
 	m.AppVersion = req.AppVersion
 	m.ProtocolVersion = protocolVersion
@@ -51,7 +62,7 @@ func (m *Device) FromRequest(req RegisterDeviceRequest) error {
 
 // FromEntity maps a persistence entity into the device model.
 func (m *Device) FromEntity(entity store.SyncDevice) error {
-	if entity.DeviceID == uuid.Nil || entity.OwnerID == uuid.Nil {
+	if entity.DeviceID == uuid.Nil || entity.OwnerID == uuid.Nil || !constants.ValidDeviceIdentifier(entity.DeviceIdentifier) || entity.DeviceName == "" {
 		return errors.New("device entity must contain valid identifiers")
 	}
 	if entity.ProtocolVersion != 1 {
@@ -59,8 +70,9 @@ func (m *Device) FromEntity(entity store.SyncDevice) error {
 	}
 
 	m.DeviceID = entity.DeviceID
+	m.DeviceIdentifier = entity.DeviceIdentifier
 	m.OwnerID = entity.OwnerID
-	m.DeviceName = store.TextPtr(entity.DeviceName)
+	m.DeviceName = entity.DeviceName
 	m.Platform = store.TextPtr(entity.Platform)
 	m.AppVersion = store.TextPtr(entity.AppVersion)
 	m.ProtocolVersion = entity.ProtocolVersion
@@ -72,33 +84,35 @@ func (m *Device) FromEntity(entity store.SyncDevice) error {
 
 // Entity converts the model into the persistence input for device creation.
 func (m Device) Entity(ownerID uuid.UUID) (store.CreateDeviceParams, error) {
-	if ownerID == uuid.Nil || m.DeviceID == uuid.Nil {
+	if ownerID == uuid.Nil || m.DeviceID == uuid.Nil || !constants.ValidDeviceIdentifier(m.DeviceIdentifier) || m.DeviceName == "" {
 		return store.CreateDeviceParams{}, httpapi.InvalidRequest("device identifiers are required.")
 	}
 	if m.ProtocolVersion != 1 {
 		return store.CreateDeviceParams{}, httpapi.NewError(http.StatusBadRequest, httpapi.CodeUnsupportedProtocol, "The requested sync protocol is not supported.")
 	}
 	return store.CreateDeviceParams{
-		DeviceID:        m.DeviceID,
-		OwnerID:         ownerID,
-		DeviceName:      m.DeviceName,
-		Platform:        m.Platform,
-		AppVersion:      m.AppVersion,
-		ProtocolVersion: m.ProtocolVersion,
+		DeviceID:         m.DeviceID,
+		DeviceIdentifier: m.DeviceIdentifier,
+		OwnerID:          ownerID,
+		DeviceName:       m.DeviceName,
+		Platform:         m.Platform,
+		AppVersion:       m.AppVersion,
+		ProtocolVersion:  m.ProtocolVersion,
 	}, nil
 }
 
 // Response converts the model into the public API representation.
 func (m Device) Response() DeviceResponse {
 	return DeviceResponse{
-		ID:              m.DeviceID,
-		DeviceName:      m.DeviceName,
-		Platform:        m.Platform,
-		AppVersion:      m.AppVersion,
-		ProtocolVersion: m.ProtocolVersion,
-		LastSeenAt:      m.LastSeenAt,
-		CreatedAt:       m.CreatedAt,
-		RevokedAt:       m.RevokedAt,
+		ID:               m.DeviceID,
+		DeviceIdentifier: m.DeviceIdentifier,
+		DeviceName:       m.DeviceName,
+		Platform:         m.Platform,
+		AppVersion:       m.AppVersion,
+		ProtocolVersion:  m.ProtocolVersion,
+		LastSeenAt:       m.LastSeenAt,
+		CreatedAt:        m.CreatedAt,
+		RevokedAt:        m.RevokedAt,
 	}
 }
 
@@ -110,6 +124,24 @@ func (r *DeviceResponse) FromEntity(entity store.SyncDevice) error {
 	}
 	*r = model.Response()
 	return nil
+}
+
+func nextDeviceName(base string, existing []string) string {
+	prefix := base + "-"
+	maxSuffix := 0
+	for _, name := range existing {
+		if name == base {
+			return base
+		}
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		suffix, err := strconv.Atoi(strings.TrimPrefix(name, prefix))
+		if err == nil && suffix > maxSuffix {
+			maxSuffix = suffix
+		}
+	}
+	return fmt.Sprintf("%s-%d", base, maxSuffix+1)
 }
 
 // FromEntities maps persistence entities into a response list.

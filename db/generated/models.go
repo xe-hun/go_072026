@@ -106,13 +106,14 @@ type OutboxJob struct {
 }
 
 type SyncDevice struct {
-	DeviceID        pgtype.UUID        `json:"device_id"`
-	OwnerID         pgtype.UUID        `json:"owner_id"`
-	DeviceName      pgtype.Text        `json:"device_name"`
-	Platform        pgtype.Text        `json:"platform"`
-	AppVersion      pgtype.Text        `json:"app_version"`
-	ProtocolVersion int32              `json:"protocol_version"`
-	LastSeenAt      pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	DeviceID         pgtype.UUID        `json:"device_id"`
+	OwnerID          pgtype.UUID        `json:"owner_id"`
+	DeviceName       string             `json:"device_name"`
+	Platform         pgtype.Text        `json:"platform"`
+	AppVersion       pgtype.Text        `json:"app_version"`
+	ProtocolVersion  int32              `json:"protocol_version"`
+	LastSeenAt       pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	RevokedAt        pgtype.Timestamptz `json:"revoked_at"`
+	DeviceIdentifier string             `json:"device_identifier"`
 }

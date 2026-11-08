@@ -17,11 +17,12 @@ var ErrNotFound = errors.New("not found")
 type SyncDevice struct {
 	// DeviceID is the UUID used by sync requests.
 	DeviceID uuid.UUID
+	// DeviceIdentifier identifies the client installation or hardware.
+	DeviceIdentifier string
 	// OwnerID scopes the device to one authenticated user.
 	OwnerID uuid.UUID
-	// DeviceName is nullable because clients may register anonymously named
-	// devices.
-	DeviceName pgtype.Text
+	// DeviceName is the required human-readable device label.
+	DeviceName string
 	// Platform is optional client metadata.
 	Platform pgtype.Text
 	// AppVersion is optional client metadata.
@@ -177,10 +178,13 @@ type FileUpload struct {
 type CreateDeviceParams struct {
 	// DeviceID is supplied by the client.
 	DeviceID uuid.UUID
+	// DeviceIdentifier identifies the client installation or hardware.
+	DeviceIdentifier string
 	// OwnerID is the authenticated user.
 	OwnerID uuid.UUID
-	// DeviceName, Platform, and AppVersion are optional metadata.
-	DeviceName *string
+	// DeviceName is the required human-readable device label.
+	DeviceName string
+	// Platform and AppVersion are optional metadata.
 	Platform   *string
 	AppVersion *string
 	// ProtocolVersion is currently expected to be 1.

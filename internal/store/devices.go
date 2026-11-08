@@ -11,14 +11,21 @@ import (
 // CreateDevice inserts a new sync_devices row and returns the stored device.
 func (s *Store) CreateDevice(ctx context.Context, arg CreateDeviceParams) (SyncDevice, error) {
 	device, err := s.q.CreateDevice(ctx, db.CreateDeviceParams{
-		DeviceID:        pgUUID(arg.DeviceID),
-		OwnerID:         pgUUID(arg.OwnerID),
-		DeviceName:      pgText(arg.DeviceName),
-		Platform:        pgText(arg.Platform),
-		AppVersion:      pgText(arg.AppVersion),
-		ProtocolVersion: arg.ProtocolVersion,
+		DeviceID:         pgUUID(arg.DeviceID),
+		DeviceIdentifier: arg.DeviceIdentifier,
+		OwnerID:          pgUUID(arg.OwnerID),
+		DeviceName:       arg.DeviceName,
+		Platform:         pgText(arg.Platform),
+		AppVersion:       pgText(arg.AppVersion),
+		ProtocolVersion:  arg.ProtocolVersion,
 	})
 	return fromDBDevice(device), err
+}
+
+// ListDeviceNamesByIdentifier returns names already used by devices with the
+// same client device identifier.
+func (s *Store) ListDeviceNamesByIdentifier(ctx context.Context, deviceIdentifier string) ([]string, error) {
+	return s.q.ListDeviceNamesByIdentifier(ctx, deviceIdentifier)
 }
 
 // ListDevices returns all devices for one owner.

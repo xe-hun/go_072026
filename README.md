@@ -146,8 +146,11 @@ links for them, so one unavailable upload does not block ready files.
 
 ## Sync Notes
 
-Device registration requires a client-supplied UUID `deviceId`. The same UUID is
-used by the sync and revoke endpoints.
+Device registration requires a client-supplied UUID `deviceId`, a non-empty
+`device_identifier` of at most 100 characters, and a non-null `deviceName`.
+When the requested name is not already used by that device identifier, the
+server appends the next numeric suffix. The same UUID is used by the sync and
+revoke endpoints.
 
 The sync POST endpoint accepts a batch of note/block operations without a cursor. Client operations
 include a per-note integer `sequence`; the server sorts by `noteId` and then
