@@ -8,7 +8,7 @@ DEV_JWT_SUBJECT ?=
 DEV_JWT_DAYS ?= 365
 DEV_JWKS_ADDR ?= :8081
 
-.PHONY: db-up db-down db-reset migrate-up migrate-down migrate-version migrate-force dev-auth dev-jwks dev-auth-verify sqlc run-api run-websocket run-worker test test-race test-integration lint tidy
+.PHONY: db-up db-down db-reset db-reset-in-place migrate-up migrate-down migrate-version migrate-force dev-auth dev-jwks dev-auth-verify sqlc run-api run-websocket run-worker test test-race test-integration lint tidy
 
 db-up:
 	docker compose up -d 
@@ -21,6 +21,12 @@ db-reset:
 	@powershell -NoProfile -Command "$$answer = Read-Host 'Type DELETE to continue'; if ($$answer -ne 'DELETE') { exit 1 }"
 	docker compose down -v
 	docker compose up -d postgres
+
+db-reset-in-place:
+	@echo "WARNING: this deletes all tables and data in the local notes_db database without stopping PostgreSQL or pgAdmin."
+	@powershell -NoProfile -Command "$$answer = Read-Host 'Type DELETE to continue'; if ($$answer -ne 'DELETE') { exit 1 }"
+	docker compose exec -T postgres psql -U notes_user -d notes_db -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+	$(MAKE) migrate-up
 
 migrate-up:
 	$(MIGRATE) -path $(MIGRATIONS_PATH) -database "$(DATABASE_URL)" up

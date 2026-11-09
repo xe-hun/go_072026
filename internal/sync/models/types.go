@@ -159,6 +159,6 @@ type PulledChange struct {
 	ChangeFormat         string          `json:"changeFormat"`
 	SchemaVersion        int32           `json:"schemaVersion"`
 	ChangeData           json.RawMessage `json:"changeData"`
-	GlobalSequence       int64           `json:"globalSequence"`
+	Cursor               int64           `json:"cursor"`
 	CreatedAt            time.Time       `json:"createdAt"`
 }

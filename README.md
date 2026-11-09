@@ -68,6 +68,7 @@ go test -race ./...
 make test-integration
 make lint
 make db-reset
+make db-reset-in-place
 ```
 
 If an existing empty database already has the initial schema from the previous
@@ -75,6 +76,10 @@ Goose migration, initialize golang-migrate bookkeeping with
 `make migrate-force VERSION=1` instead of rerunning the initial migration.
 
 `make db-reset` deletes the local PostgreSQL Docker volume after an explicit confirmation prompt.
+
+`make db-reset-in-place` clears the local `notes_db` schema and reapplies every
+migration without stopping PostgreSQL or pgAdmin. It also asks for explicit
+confirmation and requires the PostgreSQL container to be running.
 
 For local or non-live testing without a real auth provider, generate a fake
 one-year JWT and JWKS with `make dev-auth`, run the JWKS endpoint with

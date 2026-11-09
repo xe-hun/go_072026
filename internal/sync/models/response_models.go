@@ -2,10 +2,11 @@ package models
 
 import (
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"notes-server/internal/store"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // FromEntity maps a persistence change into the pulled-change response.
@@ -22,7 +23,7 @@ func (c *PulledChange) FromEntity(entity store.NoteChange) error {
 		ChangeFormat:         entity.ChangeFormat,
 		SchemaVersion:        entity.SchemaVersion,
 		ChangeData:           store.NormalizeJSON(entity.ChangeData),
-		GlobalSequence:       entity.GlobalSequence,
+		Cursor:               entity.GlobalSequence,
 		CreatedAt:            entity.CreatedAt,
 	}
 	return nil

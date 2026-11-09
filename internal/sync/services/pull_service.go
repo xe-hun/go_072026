@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	"net/http"
 	"notes-server/internal/httpapi"
 	"notes-server/internal/store"
 	. "notes-server/internal/sync/models"
+
+	"github.com/google/uuid"
 )
 
 // Pull returns remote changes after the supplied cursor for a device.
@@ -81,8 +82,8 @@ func (s *Service) UpdatesAvailable(ctx context.Context, ownerID uuid.UUID, req U
 func nextCursor(start int64, changes []PulledChange) int64 {
 	next := start
 	for _, change := range changes {
-		if change.GlobalSequence > next {
-			next = change.GlobalSequence
+		if change.Cursor > next {
+			next = change.Cursor
 		}
 	}
 	return next

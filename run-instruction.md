@@ -412,6 +412,16 @@ make db-reset
 
 The command asks for explicit confirmation before deleting the Docker volume.
 
+To clear all tables and rerun every migration while leaving PostgreSQL and
+pgAdmin running, use:
+
+```sh
+make db-reset-in-place
+```
+
+This also asks for explicit confirmation. Existing pgAdmin query sessions may
+need to be refreshed after the schema is recreated.
+
 ## 15. Debugging in VS Code
 
 Use the included `.vscode/launch.json` configurations:

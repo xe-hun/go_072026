@@ -20,7 +20,7 @@ func TestSyncResponseContracts(t *testing.T) {
 		}
 	}
 
-	pullJSON, err := json.Marshal(PulledChange{GlobalSequence: 42, ResultingNoteVersion: 7})
+	pullJSON, err := json.Marshal(PulledChange{Cursor: 42, ResultingNoteVersion: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
