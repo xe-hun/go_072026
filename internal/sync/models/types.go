@@ -86,9 +86,8 @@ type Response struct {
 
 // PullResponse is returned by GET /v1/sync.
 type PullResponse struct {
-	Changes    []PulledChange `json:"changes"`
-	HasMore    bool           `json:"hasMore"`
-	NextCursor int64          `json:"nextCursor"`
+	Changes []PulledChange `json:"changes"`
+	HasMore bool           `json:"hasMore"`
 }
 
 // UpdatesAvailableResponse is returned by the device update availability

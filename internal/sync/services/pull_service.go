@@ -20,7 +20,7 @@ func (s *Service) Pull(ctx context.Context, ownerID uuid.UUID, req PullRequest) 
 	if limit > s.maxPullLimit {
 		limit = s.maxPullLimit
 	}
-	resp := PullResponse{Changes: []PulledChange{}, NextCursor: req.Cursor}
+	resp := PullResponse{Changes: []PulledChange{}}
 	err := s.store.WithTx(ctx, func(tx *store.Store) error {
 		device, err := tx.GetDeviceForOwnerForUpdate(ctx, req.DeviceID, ownerID)
 		if errors.Is(err, store.ErrNotFound) {
@@ -47,7 +47,7 @@ func (s *Service) Pull(ctx context.Context, ownerID uuid.UUID, req PullRequest) 
 			}
 			resp.Changes = append(resp.Changes, pulled)
 		}
-		resp.NextCursor = nextCursor(req.Cursor, resp.Changes)
+		// resp.StartCursor = nextCursor(req.Cursor, resp.Changes)
 		return tx.TouchDevice(ctx, req.DeviceID, ownerID)
 	})
 	return resp, err
@@ -79,12 +79,12 @@ func (s *Service) UpdatesAvailable(ctx context.Context, ownerID uuid.UUID, req U
 // sortedOperations returns a copy ordered by note id and then client sequence.
 
 // returned pulled change so the next page is not skipped.
-func nextCursor(start int64, changes []PulledChange) int64 {
-	next := start
-	for _, change := range changes {
-		if change.Cursor > next {
-			next = change.Cursor
-		}
-	}
-	return next
-}
+// func nextCursor(start int64, changes []PulledChange) int64 {
+// 	next := start
+// 	for _, change := range changes {
+// 		if change.Cursor > next {
+// 			next = change.Cursor
+// 		}
+// 	}
+// 	return next
+// }
